@@ -1,0 +1,26 @@
+[package]
+name = "axec"
+version = "0.1.0"
+edition = "2024"
+description = "Daemon-backed CLI for persistent async command and REPL sessions"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+clap = "4.5"
+dirs = "6.0"
+portable-pty = "0.9"
+rust-i18n = "3.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.45", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { version = "1.17", features = ["serde", "v4"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.30", features = ["signal", "process", "term"] }
+
+[dev-dependencies]
+tempfile = "3.20"

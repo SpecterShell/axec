@@ -1,0 +1,26 @@
+zh-CN:
+  help:
+    app_about: 用于管理长时间运行 REPL 和命令会话的异步命令执行 CLI
+    json: 输出结构化 JSON 响应
+    list_about: 列出当前跟踪的会话
+    run_about: 启动后台命令；只有请求流式输出时才保持前台等待
+    cat_about: 打印会话输出历史，并可选择持续跟随新输出
+    input_about: 向正在运行的会话发送输入
+    signal_about: 向正在运行的会话发送操作系统信号
+    kill_about: 强制终止正在运行的会话
+    attach_about: 交互式附加到某个会话
+    clean_about: 删除已退出的会话及其磁盘状态
+    name: 会话的可选唯一名称
+    timeout: 流式输出 N 秒后返回
+    terminate: 达到超时时终止会话，或一直等待到其自然退出
+    cwd: 启动命令时使用的工作目录
+    env: 以 K=V 形式设置环境变量覆盖
+    command: 要执行的命令
+    follow: 打印历史后继续流式跟随新输出
+    stderr: 显示 stderr 历史而不是 stdout 历史
+    input_text: 要发送到会话的文本，或使用 - 从 stdin 读取
+    signal: 信号名称或编号
+    session: 会话 UUID 或活动名称
+    missing_subcommand: 必须提供子命令
+    unknown_command: 未知命令
+    invalid_env: --env 需要 K=V 格式

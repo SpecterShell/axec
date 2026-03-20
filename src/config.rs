@@ -1,0 +1,14 @@
+pub const APP_NAME: &str = "axec";
+pub const SOCKET_FILE_NAME: &str = "daemon.sock";
+pub const PID_FILE_NAME: &str = "daemon.pid";
+pub const SESSION_DIR_NAME: &str = "sessions";
+pub const STDOUT_LOG_NAME: &str = "stdout.log";
+pub const STDERR_LOG_NAME: &str = "stderr.log";
+pub const META_FILE_NAME: &str = "meta.json";
+pub const OUTPUT_RING_BYTES: usize = 1024 * 1024;
+pub const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
+pub const CONNECT_RETRIES: usize = 50;
+pub const CONNECT_RETRY_DELAY_MS: u64 = 100;
+pub const IDLE_TIMEOUT_SECS: u64 = 300;
+pub const IDLE_POLL_SECS: u64 = 5;
+pub const TERMINATION_GRACE_SECS: u64 = 2;
