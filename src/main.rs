@@ -3,32 +3,22 @@ extern crate rust_i18n;
 
 i18n!("locales", fallback = "en");
 
-#[cfg(unix)]
 mod cli;
-#[cfg(unix)]
 mod client;
-#[cfg(unix)]
 mod config;
-#[cfg(unix)]
 mod daemon;
-#[cfg(unix)]
 mod error;
-#[cfg(unix)]
 mod i18n;
-#[cfg(unix)]
 mod paths;
-#[cfg(unix)]
 mod platform;
-#[cfg(unix)]
 mod protocol;
+mod terminal;
+mod transport;
 
-#[cfg(unix)]
 use std::ffi::OsStr;
 
-#[cfg(unix)]
 use tracing_subscriber::EnvFilter;
 
-#[cfg(unix)]
 #[tokio::main]
 async fn main() {
     init_tracing();
@@ -52,13 +42,6 @@ async fn main() {
     }
 }
 
-#[cfg(not(unix))]
-fn main() {
-    eprintln!("axec currently supports Unix builds only.");
-    std::process::exit(1);
-}
-
-#[cfg(unix)]
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
     let _ = tracing_subscriber::fmt()

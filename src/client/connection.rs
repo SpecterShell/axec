@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::time::Duration;
 
-use tokio::net::UnixStream;
 use tokio::time::sleep;
 
 use crate::config;
@@ -9,9 +8,10 @@ use crate::error::{AxecError, Result};
 use crate::paths;
 use crate::platform;
 use crate::protocol::{Request, Response, read_frame, write_frame};
+use crate::transport::{self, Connection};
 
 pub struct DaemonConnection {
-    stream: UnixStream,
+    stream: Connection,
 }
 
 impl DaemonConnection {
@@ -39,7 +39,7 @@ impl DaemonConnection {
 
     async fn try_connect(path: &Path) -> Result<Self> {
         Ok(Self {
-            stream: UnixStream::connect(path).await?,
+            stream: transport::connect(path).await?,
         })
     }
 
@@ -51,7 +51,7 @@ impl DaemonConnection {
         read_frame(&mut self.stream).await
     }
 
-    pub fn into_stream(self) -> UnixStream {
+    pub fn into_stream(self) -> Connection {
         self.stream
     }
 }

@@ -1,22 +1,24 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use regex::Regex;
 use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{broadcast, oneshot};
 use tokio::time::timeout;
 use tracing::debug;
 
 use crate::config;
 use crate::error::{AxecError, Result};
-use crate::protocol::{Request, Response, read_frame, write_frame};
+use crate::protocol::{OutputStream, Request, Response, read_frame, write_frame};
+use crate::terminal;
+use crate::transport::{Connection, Listener};
 
 use super::idle_monitor::ActivityTracker;
 use super::session::{Session, SessionEvent, SessionSpec};
 use super::session_manager::SessionManager;
 
 pub async fn run(
-    listener: UnixListener,
+    mut listener: Listener,
     manager: Arc<SessionManager>,
     activity: ActivityTracker,
     mut shutdown: oneshot::Receiver<()>,
@@ -25,7 +27,7 @@ pub async fn run(
         tokio::select! {
             _ = &mut shutdown => break,
             accepted = listener.accept() => {
-                let (stream, _) = accepted?;
+                let stream = accepted?;
                 let manager = manager.clone();
                 let activity = activity.clone();
                 tokio::spawn(async move {
@@ -41,7 +43,7 @@ pub async fn run(
 }
 
 async fn handle_client(
-    mut stream: UnixStream,
+    mut stream: Connection,
     manager: Arc<SessionManager>,
     activity: ActivityTracker,
 ) -> Result<()> {
@@ -96,7 +98,7 @@ async fn handle_client(
 }
 
 async fn route_request(
-    stream: &mut UnixStream,
+    stream: &mut Connection,
     request: Request,
     manager: Arc<SessionManager>,
     activity: ActivityTracker,
@@ -112,14 +114,18 @@ async fn route_request(
             args,
             name,
             timeout,
+            stopword,
             terminate,
+            backend,
             cwd,
             env,
         } => {
+            let stopword = compile_stopword(stopword)?;
             let session = manager.create_session(SessionSpec {
                 name,
                 command,
                 args,
+                backend,
                 cwd,
                 env,
             })?;
@@ -132,8 +138,8 @@ async fn route_request(
                 },
             )
             .await?;
-            if timeout.is_some() || terminate {
-                stream_live(stream, session, receiver, timeout, terminate).await?;
+            if timeout.is_some() || terminate || stopword.is_some() {
+                stream_live(stream, session, receiver, timeout, stopword, terminate).await?;
             }
         }
         Request::Cat {
@@ -141,12 +147,27 @@ async fn route_request(
             follow,
             stderr,
         } => {
-            let session = manager.get(&session)?;
+            let session = resolve_session(&manager, session.as_deref())?;
             let history = session.history(stderr)?;
             write_frame(stream, &Response::CatOutput { data: history }).await?;
             if follow {
-                follow_live(stream, session).await?;
+                follow_live(
+                    stream,
+                    session,
+                    Some(if stderr {
+                        OutputStream::Stderr
+                    } else {
+                        OutputStream::Stdout
+                    }),
+                )
+                .await?;
             }
+        }
+        Request::Output { session } => {
+            let session = resolve_session(&manager, session.as_deref())?;
+            let (data, stdout_end) = session.unread_stdout()?;
+            write_frame(stream, &Response::OutputData { data }).await?;
+            session.mark_stdout_consumed(stdout_end);
         }
         Request::List => {
             write_frame(
@@ -161,13 +182,15 @@ async fn route_request(
             session,
             text,
             timeout,
+            stopword,
             terminate,
         } => {
-            let session = manager.get(&session)?;
+            let stopword = compile_stopword(stopword)?;
+            let session = resolve_session(&manager, session.as_deref())?;
             let receiver = session.subscribe();
             session.write_input(text).await?;
-            if timeout.is_some() || terminate {
-                stream_live(stream, session, receiver, timeout, terminate).await?;
+            if timeout.is_some() || terminate || stopword.is_some() {
+                stream_live(stream, session, receiver, timeout, stopword, terminate).await?;
             } else {
                 write_frame(
                     stream,
@@ -179,7 +202,7 @@ async fn route_request(
             }
         }
         Request::Signal { session, signal } => {
-            let session = manager.get(&session)?;
+            let session = resolve_session(&manager, session.as_deref())?;
             session.send_signal(&signal)?;
             write_frame(
                 stream,
@@ -220,10 +243,10 @@ async fn route_request(
     Ok(())
 }
 
-async fn attach_live(stream: UnixStream, session: Arc<Session>) -> Result<()> {
+async fn attach_live(stream: Connection, session: Arc<Session>) -> Result<()> {
     let recent_output = session.recent_output();
     let mut receiver = session.subscribe();
-    let (mut socket_reader, mut socket_writer) = stream.into_split();
+    let (mut socket_reader, mut socket_writer) = tokio::io::split(stream);
 
     if !recent_output.is_empty() {
         write_raw(&mut socket_writer, &recent_output).await?;
@@ -293,13 +316,15 @@ fn is_client_disconnect(err: &AxecError) -> bool {
 }
 
 async fn stream_live(
-    stream: &mut UnixStream,
+    stream: &mut Connection,
     session: Arc<Session>,
     mut receiver: broadcast::Receiver<SessionEvent>,
     timeout_secs: Option<u64>,
+    stopword: Option<Regex>,
     terminate: bool,
 ) -> Result<()> {
     let mut exit_rx = session.exit_receiver();
+    let mut stopword = stopword.map(StopwordMatcher::new);
     let initial_exit = *exit_rx.borrow();
     if let Some(exit_code) = initial_exit {
         write_frame(
@@ -332,7 +357,9 @@ async fn stream_live(
             Some(Ok(SessionEvent::Output {
                 data,
                 stream: output,
+                stdout_end,
             })) => {
+                let stopword_matched = stopword.as_mut().is_some_and(|matcher| matcher.push(&data));
                 write_frame(
                     stream,
                     &Response::OutputChunk {
@@ -341,6 +368,24 @@ async fn stream_live(
                     },
                 )
                 .await?;
+                if matches!(output, OutputStream::Stdout)
+                    && let Some(stdout_end) = stdout_end
+                {
+                    session.mark_stdout_consumed(stdout_end);
+                }
+                if stopword_matched {
+                    let exit_code = *exit_rx.borrow();
+                    write_frame(
+                        stream,
+                        &Response::Finished {
+                            exit_code,
+                            timed_out: false,
+                            running: exit_code.is_none(),
+                        },
+                    )
+                    .await?;
+                    return Ok(());
+                }
             }
             Some(Ok(SessionEvent::Finished { exit_code })) => {
                 write_frame(
@@ -419,7 +464,62 @@ async fn stream_live(
     }
 }
 
-async fn follow_live(stream: &mut UnixStream, session: Arc<Session>) -> Result<()> {
+fn resolve_session(manager: &Arc<SessionManager>, selector: Option<&str>) -> Result<Arc<Session>> {
+    match selector {
+        Some(selector) => manager.get(selector),
+        None => manager.latest_session(),
+    }
+}
+
+fn compile_stopword(stopword: Option<String>) -> Result<Option<Regex>> {
+    stopword
+        .map(|pattern| {
+            Regex::new(&pattern)
+                .map_err(|err| AxecError::Protocol(format!("invalid stopword regex: {err}")))
+        })
+        .transpose()
+}
+
+struct StopwordMatcher {
+    regex: Regex,
+    buffer: String,
+}
+
+impl StopwordMatcher {
+    fn new(regex: Regex) -> Self {
+        Self {
+            regex,
+            buffer: String::new(),
+        }
+    }
+
+    fn push(&mut self, text: &str) -> bool {
+        self.buffer.push_str(&terminal::sanitize_for_matching(text));
+        trim_match_buffer(&mut self.buffer, config::OUTPUT_RING_BYTES);
+        self.regex.is_match(&self.buffer)
+    }
+}
+
+fn trim_match_buffer(buffer: &mut String, max_bytes: usize) {
+    if buffer.len() <= max_bytes {
+        return;
+    }
+
+    let overflow = buffer.len() - max_bytes;
+    let drain_to = buffer
+        .char_indices()
+        .map(|(index, _)| index)
+        .chain(std::iter::once(buffer.len()))
+        .find(|index| *index >= overflow)
+        .unwrap_or(overflow);
+    buffer.drain(..drain_to);
+}
+
+async fn follow_live(
+    stream: &mut Connection,
+    session: Arc<Session>,
+    filter: Option<OutputStream>,
+) -> Result<()> {
     let mut receiver = session.subscribe();
     let exit_rx = session.exit_receiver();
     let initial_exit = *exit_rx.borrow();
@@ -442,7 +542,11 @@ async fn follow_live(stream: &mut UnixStream, session: Arc<Session>) -> Result<(
             Ok(SessionEvent::Output {
                 data,
                 stream: output,
+                ..
             }) => {
+                if filter.is_some_and(|expected| expected != output) {
+                    continue;
+                }
                 write_frame(
                     stream,
                     &Response::OutputChunk {

@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -10,6 +10,7 @@ struct OutputBufferInner {
     ring: VecDeque<u8>,
     file: File,
     max_bytes: usize,
+    total_bytes: u64,
 }
 
 pub struct OutputBuffer {
@@ -29,17 +30,20 @@ impl OutputBuffer {
             .read(true)
             .open(&path)?;
 
+        let total_bytes = file.metadata()?.len();
+
         Ok(Self {
             path,
             inner: Mutex::new(OutputBufferInner {
                 ring: VecDeque::new(),
                 file,
                 max_bytes,
+                total_bytes,
             }),
         })
     }
 
-    pub fn append(&self, data: &[u8]) -> Result<()> {
+    pub fn append(&self, data: &[u8]) -> Result<u64> {
         let mut inner = self.inner.lock().expect("output buffer mutex poisoned");
         inner.ring.extend(data.iter().copied());
         while inner.ring.len() > inner.max_bytes {
@@ -47,7 +51,8 @@ impl OutputBuffer {
         }
         inner.file.write_all(data)?;
         inner.file.flush()?;
-        Ok(())
+        inner.total_bytes += data.len() as u64;
+        Ok(inner.total_bytes)
     }
 
     pub fn read_all_string(&self) -> Result<String> {
@@ -63,6 +68,21 @@ impl OutputBuffer {
             .iter()
             .copied()
             .collect()
+    }
+
+    pub fn read_string_from(&self, start: u64) -> Result<(String, u64)> {
+        let end = {
+            let mut inner = self.inner.lock().expect("output buffer mutex poisoned");
+            inner.file.flush()?;
+            inner.total_bytes
+        };
+
+        let start = start.min(end);
+        let mut file = File::open(&self.path)?;
+        file.seek(SeekFrom::Start(start))?;
+        let mut data = Vec::with_capacity((end - start) as usize);
+        file.take(end - start).read_to_end(&mut data)?;
+        Ok((String::from_utf8_lossy(&data).to_string(), end))
     }
 
     #[cfg(test)]
@@ -90,5 +110,22 @@ mod tests {
 
         assert_eq!(buffer.ring_len(), 4);
         assert_eq!(buffer.read_all_string().unwrap(), "abcdef");
+    }
+
+    #[test]
+    fn reads_incremental_ranges() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("stdout.log");
+        let buffer = OutputBuffer::new(path, 8).unwrap();
+        let first_end = buffer.append(b"hello").unwrap();
+        let second_end = buffer.append(b" world").unwrap();
+
+        let (first, first_snapshot_end) = buffer.read_string_from(0).unwrap();
+        let (second, second_snapshot_end) = buffer.read_string_from(first_end).unwrap();
+
+        assert_eq!(first, "hello world");
+        assert_eq!(first_snapshot_end, second_end);
+        assert_eq!(second, " world");
+        assert_eq!(second_snapshot_end, second_end);
     }
 }

@@ -1,14 +1,19 @@
 use std::io::{self, IsTerminal, Write};
 
-use nix::sys::termios::{
-    SetArg, SpecialCharacterIndices, Termios, cfmakeraw, tcgetattr, tcsetattr,
-};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use time::OffsetDateTime;
+use time::UtcOffset;
+use time::format_description::FormatItem;
+use time::macros::format_description;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::cli::{CatArgs, Cli, Command, InputArgs, KillArgs, RunArgs, SessionArgs, SignalArgs};
+use crate::cli::{
+    CatArgs, Cli, Command, InputArgs, KillArgs, OutputArgs, RunArgs, SessionArgs, SignalArgs,
+};
 use crate::client::connection::DaemonConnection;
 use crate::error::{AxecError, Result};
 use crate::protocol::{Request, Response, SessionInfo};
+use crate::terminal;
 
 #[derive(Debug, Clone, Copy)]
 struct FinishedState {
@@ -22,6 +27,7 @@ pub async fn run(cli: Cli) -> Result<i32> {
     match cli.command {
         Command::Run(args) => run_command(args, json).await,
         Command::Cat(args) => cat_command(args, json).await,
+        Command::Output(args) => output_command(args, json).await,
         Command::List => list_command(json).await,
         Command::Input(args) => input_command(args, json).await,
         Command::Signal(args) => signal_command(args, json).await,
@@ -39,7 +45,9 @@ async fn run_command(args: RunArgs, json: bool) -> Result<i32> {
             args: args.args.clone(),
             name: args.name.clone(),
             timeout: args.timeout,
+            stopword: args.stopword.clone(),
             terminate: args.terminate,
+            backend: args.backend,
             cwd: args.cwd.clone(),
             env: args.env.clone(),
         })
@@ -55,11 +63,17 @@ async fn run_command(args: RunArgs, json: bool) -> Result<i32> {
         }
     }
 
-    if args.timeout.is_some() || args.terminate {
+    if args.timeout.is_some() || args.terminate || args.stopword.is_some() {
         let finished = drain_stream(&mut connection, json).await?;
+        if !json {
+            let _ = terminal::restore_console_state();
+        }
         Ok(match finished {
             Some(state) if state.timed_out && args.terminate => 124,
             Some(state) if args.terminate && !state.running => state.exit_code.unwrap_or(1),
+            Some(state) if args.stopword.is_some() && !state.running => {
+                state.exit_code.unwrap_or(1)
+            }
             _ => 0,
         })
     } else {
@@ -90,6 +104,10 @@ async fn cat_command(args: CatArgs, json: bool) -> Result<i32> {
         }
     }
 
+    if !json {
+        let _ = terminal::restore_console_state();
+    }
+
     Ok(0)
 }
 
@@ -114,6 +132,22 @@ async fn list_command(json: bool) -> Result<i32> {
     }
 }
 
+async fn output_command(args: OutputArgs, json: bool) -> Result<i32> {
+    let mut connection = DaemonConnection::connect().await?;
+    connection
+        .send_request(&Request::Output {
+            session: args.session,
+        })
+        .await?;
+
+    let response = expect_response(&mut connection).await?;
+    emit_response(&response, json)?;
+    if !json {
+        let _ = terminal::restore_console_state();
+    }
+    Ok(0)
+}
+
 async fn input_command(args: InputArgs, json: bool) -> Result<i32> {
     let mut connection = DaemonConnection::connect().await?;
     let text = if args.text == "-" {
@@ -127,15 +161,22 @@ async fn input_command(args: InputArgs, json: bool) -> Result<i32> {
             session: args.session,
             text,
             timeout: args.timeout,
+            stopword: args.stopword.clone(),
             terminate: args.terminate,
         })
         .await?;
 
-    if args.timeout.is_some() || args.terminate {
+    if args.timeout.is_some() || args.terminate || args.stopword.is_some() {
         let finished = drain_stream(&mut connection, json).await?;
+        if !json {
+            let _ = terminal::restore_console_state();
+        }
         Ok(match finished {
             Some(state) if state.timed_out && args.terminate => 124,
             Some(state) if args.terminate && !state.running => state.exit_code.unwrap_or(1),
+            Some(state) if args.stopword.is_some() && !state.running => {
+                state.exit_code.unwrap_or(1)
+            }
             _ => 0,
         })
     } else {
@@ -203,8 +244,7 @@ async fn attach_command(args: SessionArgs, json: bool) -> Result<i32> {
     }
 
     let _terminal = RawTerminalGuard::new()?;
-    let stream = connection.into_stream();
-    let (mut socket_reader, mut socket_writer) = stream.into_split();
+    let (mut socket_reader, mut socket_writer) = tokio::io::split(connection.into_stream());
     let mut input_task = tokio::spawn(async move {
         let mut stdin = tokio::io::stdin();
         let mut buf = [0u8; 1024];
@@ -337,17 +377,26 @@ fn emit_plain(response: &Response) -> Result<()> {
         Response::OutputChunk { data, stream } => match stream {
             crate::protocol::OutputStream::Stdout => {
                 let mut stdout = io::stdout().lock();
+                let data = terminal::sanitize_for_plain_output(data);
                 stdout.write_all(data.as_bytes())?;
                 stdout.flush()?;
             }
             crate::protocol::OutputStream::Stderr => {
                 let mut stderr = io::stderr().lock();
+                let data = terminal::sanitize_for_plain_output(data);
                 stderr.write_all(data.as_bytes())?;
                 stderr.flush()?;
             }
         },
         Response::CatOutput { data } => {
             let mut stdout = io::stdout().lock();
+            let data = terminal::sanitize_for_plain_output(data);
+            stdout.write_all(data.as_bytes())?;
+            stdout.flush()?;
+        }
+        Response::OutputData { data } => {
+            let mut stdout = io::stdout().lock();
+            let data = terminal::sanitize_for_plain_output(data);
             stdout.write_all(data.as_bytes())?;
             stdout.flush()?;
         }
@@ -370,6 +419,19 @@ fn emit_plain(response: &Response) -> Result<()> {
 
 fn print_sessions(sessions: &[SessionInfo]) -> Result<()> {
     let mut stdout = io::stdout().lock();
+    let started_times = sessions
+        .iter()
+        .map(|session| format_timestamp(session.started_at))
+        .collect::<Vec<_>>();
+    let exited_times = sessions
+        .iter()
+        .map(|session| {
+            session
+                .exited_at
+                .map(format_timestamp)
+                .unwrap_or_else(|| TIMESTAMP_PLACEHOLDER.to_string())
+        })
+        .collect::<Vec<_>>();
     let uuid_width = 36usize;
     let name_width = sessions
         .iter()
@@ -383,57 +445,89 @@ fn print_sessions(sessions: &[SessionInfo]) -> Result<()> {
         .max()
         .unwrap_or(0)
         .max("STATUS".len());
+    let started_width = started_times
+        .iter()
+        .map(|value| value.len())
+        .max()
+        .unwrap_or(0)
+        .max("STARTED".len());
+    let exited_width = exited_times
+        .iter()
+        .map(|value| value.len())
+        .max()
+        .unwrap_or(0)
+        .max("EXITED".len());
 
     writeln!(
         stdout,
-        "{:<uuid_width$}  {:<name_width$}  {:<status_width$}  COMMAND",
+        "{:<uuid_width$}  {:<name_width$}  {:<status_width$}  {:<started_width$}  {:<exited_width$}  COMMAND",
         "UUID",
         "NAME",
         "STATUS",
+        "STARTED",
+        "EXITED",
         uuid_width = uuid_width,
         name_width = name_width,
         status_width = status_width,
+        started_width = started_width,
+        exited_width = exited_width,
     )?;
-    for session in sessions {
+    for ((session, started_at), exited_at) in sessions
+        .iter()
+        .zip(started_times.iter())
+        .zip(exited_times.iter())
+    {
         let status = session.status.to_string();
         writeln!(
             stdout,
-            "{:<uuid_width$}  {:<name_width$}  {:<status_width$}  {}",
+            "{:<uuid_width$}  {:<name_width$}  {:<status_width$}  {:<started_width$}  {:<exited_width$}  {}",
             session.uuid,
             session.name.as_deref().unwrap_or("-"),
             status,
+            started_at,
+            exited_at,
             session.command,
             uuid_width = uuid_width,
             name_width = name_width,
             status_width = status_width,
+            started_width = started_width,
+            exited_width = exited_width,
         )?;
     }
     stdout.flush()?;
     Ok(())
 }
 
-struct RawTerminalGuard {
-    original: Termios,
-}
+struct RawTerminalGuard;
 
 impl RawTerminalGuard {
     fn new() -> Result<Self> {
-        let stdin = io::stdin();
-        let mut raw = tcgetattr(&stdin)?;
-        let original = raw.clone();
-
-        cfmakeraw(&mut raw);
-        raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
-        raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
-        tcsetattr(&stdin, SetArg::TCSANOW, &raw)?;
-
-        Ok(Self { original })
+        enable_raw_mode()?;
+        Ok(Self)
     }
 }
 
 impl Drop for RawTerminalGuard {
     fn drop(&mut self) {
-        let stdin = io::stdin();
-        let _ = tcsetattr(&stdin, SetArg::TCSANOW, &self.original);
+        let _ = disable_raw_mode();
     }
+}
+
+const TIMESTAMP_PLACEHOLDER: &str = "-";
+const TIMESTAMP_FORMAT: &[FormatItem<'static>] =
+    format_description!("[year]-[month]-[day] [hour]:[minute]:[second]");
+
+fn format_timestamp(timestamp: i64) -> String {
+    let Ok(datetime) = OffsetDateTime::from_unix_timestamp_nanos(timestamp as i128 * 1_000_000)
+    else {
+        return TIMESTAMP_PLACEHOLDER.to_string();
+    };
+
+    let local = UtcOffset::current_local_offset()
+        .map(|offset| datetime.to_offset(offset))
+        .unwrap_or(datetime);
+
+    local
+        .format(TIMESTAMP_FORMAT)
+        .unwrap_or_else(|_| TIMESTAMP_PLACEHOLDER.to_string())
 }

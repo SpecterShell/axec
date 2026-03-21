@@ -4,16 +4,33 @@
 
 The goal is to build a cross-platform CLI tool that lets an AI model (or user) manage long-running REPL sessions and commands asynchronously. This solves three problems: (1) CLI commands are stateless/one-shot — context is lost after each run, (2) MCP servers can't cover all language libraries, and (3) MCP exports too many functions consuming LLM context. With `axec`, a model can start a Python/Node/bash REPL, send code to it over time, and monitor output — all through simple CLI commands.
 
+## Status
+
+Current implementation status:
+
+- Unix and Windows runtime support are implemented
+- daemon auto-start and idle shutdown are implemented
+- `pty` is the default session backend; `pipe` and `auto` are available when separate stdout/stderr is needed
+- `run`, `exec`, `list`, `cat`, `output`, `input`, `signal`, `kill`, `terminate`, `clean`, `clear`, and `attach` are implemented
+- `--json` output is implemented
+- partial UUID lookup is implemented when the prefix is unique
+- localized CLI help and docs are implemented for English, Simplified Chinese, and Traditional Chinese
+
+Known gaps:
+
+- there are only unit tests today, not full integration tests
+- PTY-backed sessions intentionally merge stdout/stderr to preserve the terminal transcript an agent or human would see
+
 ## Architecture
 
 **Daemon + CLI client** over Unix socket (Linux/macOS) / named pipe (Windows).
 
 - The daemon auto-starts on first CLI command and auto-stops after idle timeout
-- Each session wraps a child process in a PTY (via `portable-pty`) so interactive REPLs work naturally
+- Sessions use a PTY by default so interactive REPLs work naturally, with an optional pipe backend for split stdout/stderr
 - Output is captured to both an in-memory ring buffer (fast streaming) and append-only log files (stdout.log + stderr.log for full history)
 - Wire protocol: length-delimited JSON frames over the socket
 
-**Tech stack**: Rust, tokio, clap (derive), serde, portable-pty, uuid, dirs, tracing, thiserror, rust-i18n
+**Tech stack**: Rust, tokio, clap, serde, portable-pty, conpty, uuid, dirs, tracing, thiserror, rust-i18n
 
 ## Commands
 
@@ -24,12 +41,12 @@ The goal is to build a cross-platform CLI tool that lets an AI model (or user) m
 | `axec run --terminate <cmd>` | Spawn, wait for process to finish, pass exit code |
 | `axec run --terminate --timeout N <cmd>` | Spawn, stream for N seconds, kill on timeout (exit 124) |
 | `axec cat --session UUID\|NAME [--follow] [--stderr]` | Print stdout (or stderr) history; `--follow` streams live |
+| `axec output [--session UUID\|NAME]` | Print stdout emitted since the last output-aware command for the session |
 | `axec list` / `axec sessions` | List sessions with status |
 | `axec input --session UUID\|NAME [--timeout N] [--terminate] <text>` | Send text to session's stdin |
 | `axec input --session UUID\|NAME --timeout N - < file` | Send file contents as input, stream output |
 | `axec signal --session UUID\|NAME <SIGNAL>` | Send signal (SIGINT, SIGTERM, etc.) to session process |
 | `axec kill --session UUID\|NAME` | Kill a session's process (SIGKILL) |
-| `axec attach --session UUID\|NAME` | Interactively attach terminal to session (like tmux attach) |
 | `axec clean` | Remove dead sessions |
 
 **Global flags**: `--json` for machine-readable JSON output on all commands.
@@ -73,7 +90,7 @@ axec/
 
 ## Key Data Structures
 
-- **Request** enum (tagged JSON): `Run { command, args, name, timeout, terminate, cwd, env }`, `Cat { session, follow, stderr }`, `List`, `Input { session, text, timeout, terminate }`, `Signal { session, signal }`, `Kill { session }`, `Attach { session }`, `Clean`, `Ping`
+- **Request** enum (tagged JSON): `Run { command, args, name, timeout, terminate, cwd, env }`, `Cat { session, follow, stderr }`, `Output { session }`, `List`, `Input { session, text, timeout, terminate }`, `Signal { session, signal }`, `Kill { session }`, `Clean`, `Ping`
 - **Response** enum (tagged JSON): `SessionCreated { uuid, name }`, `OutputChunk { data, stream: Stdout|Stderr, eof }`, `Finished { exit_code }`, `CatOutput { data }`, `SessionList { sessions }`, `Error { message }`
 - **Session**: UUID, name (Option), command, status, PTY master writer, child handle, OutputBuffer (stdout + stderr), `broadcast::Sender` for live streaming, cwd, env overrides
 - **OutputBuffer**: `VecDeque<u8>` ring (recent data) + append-only log file (full history), separate for stdout and stderr
@@ -81,9 +98,8 @@ axec/
 
 ## Communication Patterns
 
-- **One-shot** (cat, list, kill, signal, clean, run without timeout): send Request → receive one Response → close
-- **Streaming** (run/input with --timeout, cat --follow, attach): send Request → receive multiple OutputChunk → receive Finished (or client disconnects) → close
-- **Interactive** (attach): bidirectional — client forwards terminal input to daemon, daemon streams PTY output back. Client sets terminal to raw mode.
+- **One-shot** (cat, output, list, kill, signal, clean, run without timeout): send Request → receive one Response → close
+- **Streaming** (run/input with --timeout, cat --follow): send Request → receive multiple OutputChunk → receive Finished (or client disconnects) → close
 
 ## Implementation Phases
 
@@ -102,17 +118,14 @@ Implement `--timeout` and `--terminate` flags with broadcast channel subscriptio
 ### Phase 5: Input Command
 Implement writing to PTY master, `--timeout` streaming after input, stdin redirection. Goal: `axec input --session mypy "print(42)"` works with Python REPL.
 
-### Phase 6: Interactive Attach
-Implement `axec attach` — set client terminal to raw mode, forward I/O bidirectionally to the PTY via daemon. Detach with escape sequence (e.g., `Ctrl+\`).
-
-### Phase 7: JSON Output Mode and Daemon Lifecycle
+### Phase 6: JSON Output Mode and Daemon Lifecycle
 - `--json` flag: all commands output structured JSON
 - Idle monitor, PID file, stale daemon detection, graceful shutdown, stale session recovery on startup
 
-### Phase 8: Windows Support
+### Phase 7: Windows Support
 Named pipe transport, detached process spawn with `CREATE_NO_WINDOW`, test ConPTY behavior.
 
-### Phase 9: Polish
+### Phase 8: Polish
 Structured logging, table formatting for `list`, shell completions, config file support.
 
 ## Agentic Use Cases
@@ -192,7 +205,6 @@ axec cat --session db --stderr     # Check for SQL errors separately
 7. `axec run --terminate --timeout 3 sleep 100` kills process after 3 seconds, exits 124
 8. `axec signal --session test SIGINT` sends interrupt to process
 9. `axec list --json` outputs valid JSON
-10. `axec attach --session test` opens interactive session, `Ctrl+\` detaches
-11. Daemon auto-starts on first command and auto-stops after idle
-12. `LANG=zh_CN.UTF-8 axec --help` shows Chinese help text
-13. `cargo test` passes unit and integration tests
+10. Daemon auto-starts on first command and auto-stops after idle
+11. `LANG=zh_CN.UTF-8 axec --help` shows Chinese help text
+12. `cargo test` passes unit and integration tests

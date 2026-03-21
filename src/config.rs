@@ -1,4 +1,5 @@
 pub const APP_NAME: &str = "axec";
+#[cfg(unix)]
 pub const SOCKET_FILE_NAME: &str = "daemon.sock";
 pub const PID_FILE_NAME: &str = "daemon.pid";
 pub const SESSION_DIR_NAME: &str = "sessions";

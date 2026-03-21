@@ -12,6 +12,7 @@ pub enum AxecError {
     Anyhow(#[from] anyhow::Error),
     #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
+    #[cfg(unix)]
     #[error(transparent)]
     Nix(#[from] nix::errno::Errno),
     #[error("home directory is unavailable")]

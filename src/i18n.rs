@@ -1,102 +1,221 @@
+use std::collections::BTreeMap;
 use std::env;
-use std::sync::OnceLock;
 
-static USE_CHINESE: OnceLock<bool> = OnceLock::new();
+const FALLBACK_LOCALE: &str = "en";
 
 pub fn init_locale() {
-    let locale = detect_locale();
-    let use_chinese = locale == "zh-CN";
-    let _ = USE_CHINESE.set(use_chinese);
-    rust_i18n::set_locale(&locale);
+    rust_i18n::set_locale(&detect_locale());
 }
 
-pub fn text(key: &str) -> &'static str {
-    match (is_chinese(), key) {
-        (false, "help.app_about") => {
-            "Async command execution CLI for long-running REPL and shell sessions"
-        }
-        (false, "help.json") => "Emit structured JSON responses",
-        (false, "help.list_about") => "List tracked sessions",
-        (false, "help.run_about") => {
-            "Start a command in the background and return immediately unless streaming is requested"
-        }
-        (false, "help.cat_about") => {
-            "Print session output history and optionally follow live output"
-        }
-        (false, "help.input_about") => "Send input to a running session",
-        (false, "help.signal_about") => "Send an OS signal to a running session",
-        (false, "help.kill_about") => "Force-kill a running session",
-        (false, "help.all") => "Target all tracked running sessions",
-        (false, "help.attach_about") => "Interactively attach to a session",
-        (false, "help.clean_about") => "Remove exited sessions and their on-disk state",
-        (false, "help.name") => "Optional unique name for the session",
-        (false, "help.timeout") => "Stream output for N seconds before returning",
-        (false, "help.terminate") => {
-            "Terminate the session if the timeout is reached or wait until it exits naturally"
-        }
-        (false, "help.cwd") => "Working directory for the spawned command",
-        (false, "help.env") => "Environment override in K=V form",
-        (false, "help.command") => "Command to execute",
-        (false, "help.follow") => "Continue streaming live output after printing history",
-        (false, "help.stderr") => "Show stderr history instead of stdout history",
-        (false, "help.input_text") => "Text to send to the session, or - to read stdin",
-        (false, "help.signal") => "Signal name or number",
-        (false, "help.session") => "Session UUID or active name",
-        (false, "help.missing_subcommand") => "A subcommand is required",
-        (false, "help.unknown_command") => "Unknown command",
-        (false, "help.invalid_env") => "--env expects K=V",
-        (true, "help.app_about") => "用于管理长时间运行 REPL 和命令会话的异步命令执行 CLI",
-        (true, "help.json") => "输出结构化 JSON 响应",
-        (true, "help.list_about") => "列出当前跟踪的会话",
-        (true, "help.run_about") => "启动后台命令；只有请求流式输出时才保持前台等待",
-        (true, "help.cat_about") => "打印会话输出历史，并可选择持续跟随新输出",
-        (true, "help.input_about") => "向正在运行的会话发送输入",
-        (true, "help.signal_about") => "向正在运行的会话发送操作系统信号",
-        (true, "help.kill_about") => "强制终止正在运行的会话",
-        (true, "help.all") => "作用于所有正在运行且被跟踪的会话",
-        (true, "help.attach_about") => "交互式附加到某个会话",
-        (true, "help.clean_about") => "删除已退出的会话及其磁盘状态",
-        (true, "help.name") => "会话的可选唯一名称",
-        (true, "help.timeout") => "流式输出 N 秒后返回",
-        (true, "help.terminate") => "达到超时时终止会话，或一直等待到其自然退出",
-        (true, "help.cwd") => "启动命令时使用的工作目录",
-        (true, "help.env") => "以 K=V 形式设置环境变量覆盖",
-        (true, "help.command") => "要执行的命令",
-        (true, "help.follow") => "打印历史后继续流式跟随新输出",
-        (true, "help.stderr") => "显示 stderr 历史而不是 stdout 历史",
-        (true, "help.input_text") => "要发送到会话的文本，或使用 - 从 stdin 读取",
-        (true, "help.signal") => "信号名称或编号",
-        (true, "help.session") => "会话 UUID 或活动名称",
-        (true, "help.missing_subcommand") => "必须提供子命令",
-        (true, "help.unknown_command") => "未知命令",
-        (true, "help.invalid_env") => "--env 需要 K=V 格式",
-        (_, _) => "",
-    }
-}
-
-fn is_chinese() -> bool {
-    *USE_CHINESE.get_or_init(|| detect_locale() == "zh-CN")
+pub fn text(key: &str) -> String {
+    t!(key).to_string()
 }
 
 fn detect_locale() -> String {
-    let raw = [
-        env::var("LC_ALL").ok(),
-        env::var("LANG").ok(),
-        env::var("LC_MESSAGES").ok(),
-    ]
-    .into_iter()
-    .flatten()
-    .find(|value| !value.is_empty() && !is_neutral_locale(value))
-    .unwrap_or_else(|| "en_US".to_string());
+    let available = rust_i18n::available_locales!();
+    let raw = detect_raw_locale().unwrap_or_else(|| FALLBACK_LOCALE.to_string());
+    resolve_locale(&raw, &available)
+}
 
-    let normalized = raw.replace('_', "-").to_ascii_lowercase();
-    if normalized.starts_with("zh") {
-        "zh-CN".to_string()
-    } else {
-        "en".to_string()
+fn detect_raw_locale() -> Option<String> {
+    ["AXEC_LOCALE", "LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"]
+        .into_iter()
+        .filter_map(|name| env::var(name).ok())
+        .flat_map(|value| {
+            value
+                .split(':')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .find(|value| !is_neutral_locale(value))
+}
+
+fn resolve_locale(raw: &str, available: &[&str]) -> String {
+    let mut canonical_locales = BTreeMap::new();
+    for locale in available {
+        if let Some(canonical) = canonicalize_locale(locale) {
+            canonical_locales.insert(canonical, *locale);
+        }
     }
+
+    if let Some(canonical) = canonicalize_locale(raw) {
+        if let Some(locale) = canonical_locales.get(&canonical) {
+            return (*locale).to_string();
+        }
+
+        let parts = canonical.split('-').collect::<Vec<_>>();
+        if parts.first().copied() == Some("zh") {
+            let preferred = if looks_traditional_chinese(&parts) {
+                "zh-TW"
+            } else {
+                "zh-CN"
+            };
+            if let Some(locale) = canonical_locales.get(preferred) {
+                return (*locale).to_string();
+            }
+        }
+    }
+
+    for candidate in locale_candidates(raw) {
+        if let Some(locale) = canonical_locales.get(&candidate) {
+            return (*locale).to_string();
+        }
+    }
+
+    if canonical_locales.contains_key(FALLBACK_LOCALE) {
+        return FALLBACK_LOCALE.to_string();
+    }
+
+    available
+        .first()
+        .copied()
+        .unwrap_or(FALLBACK_LOCALE)
+        .to_string()
+}
+
+fn locale_candidates(raw: &str) -> Vec<String> {
+    let Some(canonical) = canonicalize_locale(raw) else {
+        return vec![FALLBACK_LOCALE.to_string()];
+    };
+
+    let parts = canonical.split('-').collect::<Vec<_>>();
+    let mut candidates = Vec::new();
+
+    push_candidate(&mut candidates, canonical.clone());
+
+    if parts.first().copied() == Some("zh") {
+        if looks_traditional_chinese(&parts) {
+            push_candidate(&mut candidates, "zh-TW".to_string());
+        } else {
+            push_candidate(&mut candidates, "zh-CN".to_string());
+        }
+    }
+
+    for end in (1..parts.len()).rev() {
+        push_candidate(&mut candidates, parts[..end].join("-"));
+    }
+
+    if let Some(language) = parts.first() {
+        push_candidate(&mut candidates, (*language).to_string());
+    }
+
+    push_candidate(&mut candidates, FALLBACK_LOCALE.to_string());
+    candidates
+}
+
+fn push_candidate(candidates: &mut Vec<String>, candidate: String) {
+    if !candidates.iter().any(|existing| existing == &candidate) {
+        candidates.push(candidate);
+    }
+}
+
+fn canonicalize_locale(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let core = trimmed
+        .split('.')
+        .next()
+        .unwrap_or(trimmed)
+        .split('@')
+        .next()
+        .unwrap_or(trimmed)
+        .replace('_', "-");
+
+    let parts = core
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .enumerate()
+        .map(|(index, part)| normalize_locale_part(index, part))
+        .collect::<Vec<_>>();
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("-"))
+    }
+}
+
+fn normalize_locale_part(index: usize, part: &str) -> String {
+    if part.is_empty() {
+        return String::new();
+    }
+
+    if index == 0 {
+        return part.to_ascii_lowercase();
+    }
+
+    if part.len() == 4 && part.chars().all(|ch| ch.is_ascii_alphabetic()) {
+        let mut chars = part.chars();
+        let mut normalized = String::new();
+        if let Some(first) = chars.next() {
+            normalized.push(first.to_ascii_uppercase());
+        }
+        normalized.extend(chars.map(|ch| ch.to_ascii_lowercase()));
+        return normalized;
+    }
+
+    if (part.len() == 2 && part.chars().all(|ch| ch.is_ascii_alphabetic()))
+        || (part.len() == 3 && part.chars().all(|ch| ch.is_ascii_digit()))
+    {
+        return part.to_ascii_uppercase();
+    }
+
+    part.to_ascii_lowercase()
+}
+
+fn looks_traditional_chinese(parts: &[&str]) -> bool {
+    parts.iter().skip(1).any(|part| {
+        matches!(
+            *part,
+            "TW" | "HK" | "MO" | "Hant" | "hant" | "Macau" | "macau"
+        )
+    })
 }
 
 fn is_neutral_locale(value: &str) -> bool {
     matches!(value, "C" | "POSIX") || value.starts_with("C.")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_locale;
+
+    #[test]
+    fn resolves_exact_and_base_locales() {
+        let available = ["en", "fr", "zh-CN", "zh-TW"];
+        assert_eq!(resolve_locale("en_US.UTF-8", &available), "en");
+        assert_eq!(resolve_locale("fr_CA.UTF-8", &available), "fr");
+    }
+
+    #[test]
+    fn resolves_traditional_chinese_aliases() {
+        let available = ["en", "zh-CN", "zh-TW"];
+        assert_eq!(resolve_locale("zh_TW.UTF-8", &available), "zh-TW");
+        assert_eq!(resolve_locale("zh-Hant-HK", &available), "zh-TW");
+        assert_eq!(resolve_locale("zh_HK.UTF-8", &available), "zh-TW");
+    }
+
+    #[test]
+    fn resolves_simplified_chinese_aliases() {
+        let available = ["en", "zh-CN", "zh-TW"];
+        assert_eq!(resolve_locale("zh_CN.UTF-8", &available), "zh-CN");
+        assert_eq!(resolve_locale("zh-Hans-SG", &available), "zh-CN");
+    }
+
+    #[test]
+    fn falls_back_to_english_when_locale_is_missing() {
+        let available = ["en", "zh-CN", "zh-TW"];
+        assert_eq!(resolve_locale("de_DE.UTF-8", &available), "en");
+    }
+
+    #[test]
+    fn prefers_new_locales_when_they_exist() {
+        let available = ["en", "ja", "zh-CN", "zh-TW"];
+        assert_eq!(resolve_locale("ja_JP.UTF-8", &available), "ja");
+    }
 }

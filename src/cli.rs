@@ -4,7 +4,7 @@ use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command as ClapCommand, value_parser};
 
 use crate::i18n;
-use crate::protocol::EnvVar;
+use crate::protocol::{EnvVar, SessionBackend};
 
 #[derive(Debug, Clone)]
 pub struct Cli {
@@ -16,6 +16,7 @@ pub struct Cli {
 pub enum Command {
     Run(RunArgs),
     Cat(CatArgs),
+    Output(OutputArgs),
     List,
     Input(InputArgs),
     Signal(SignalArgs),
@@ -28,7 +29,9 @@ pub enum Command {
 pub struct RunArgs {
     pub name: Option<String>,
     pub timeout: Option<u64>,
+    pub stopword: Option<String>,
     pub terminate: bool,
+    pub backend: SessionBackend,
     pub cwd: Option<PathBuf>,
     pub env: Vec<EnvVar>,
     pub command: String,
@@ -37,22 +40,28 @@ pub struct RunArgs {
 
 #[derive(Debug, Clone)]
 pub struct CatArgs {
-    pub session: String,
+    pub session: Option<String>,
     pub follow: bool,
     pub stderr: bool,
 }
 
 #[derive(Debug, Clone)]
+pub struct OutputArgs {
+    pub session: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct InputArgs {
-    pub session: String,
+    pub session: Option<String>,
     pub timeout: Option<u64>,
+    pub stopword: Option<String>,
     pub terminate: bool,
     pub text: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct SignalArgs {
-    pub session: String,
+    pub session: Option<String>,
     pub signal: String,
 }
 
@@ -86,6 +95,7 @@ fn build_command() -> ClapCommand {
         )
         .subcommand(build_run_command())
         .subcommand(build_cat_command())
+        .subcommand(build_output_command())
         .subcommand(
             ClapCommand::new("list")
                 .about(i18n::text("help.list_about").to_string())
@@ -95,7 +105,11 @@ fn build_command() -> ClapCommand {
         .subcommand(build_signal_command())
         .subcommand(build_kill_command())
         .subcommand(build_attach_command())
-        .subcommand(ClapCommand::new("clean").about(i18n::text("help.clean_about").to_string()))
+        .subcommand(
+            ClapCommand::new("clean")
+                .alias("clear")
+                .about(i18n::text("help.clean_about").to_string()),
+        )
 }
 
 fn build_run_command() -> ClapCommand {
@@ -117,10 +131,24 @@ fn build_run_command() -> ClapCommand {
                 .help(i18n::text("help.timeout").to_string()),
         )
         .arg(
+            Arg::new("stopword")
+                .long("stopword")
+                .value_name("REGEX")
+                .help(i18n::text("help.stopword").to_string()),
+        )
+        .arg(
             Arg::new("terminate")
                 .long("terminate")
                 .action(ArgAction::SetTrue)
                 .help(i18n::text("help.terminate").to_string()),
+        )
+        .arg(
+            Arg::new("backend")
+                .long("backend")
+                .value_name("KIND")
+                .default_value("pty")
+                .value_parser(["pty", "pipe", "auto"])
+                .help(i18n::text("help.backend").to_string()),
         )
         .arg(
             Arg::new("cwd")
@@ -153,7 +181,7 @@ fn build_run_command() -> ClapCommand {
 fn build_cat_command() -> ClapCommand {
     ClapCommand::new("cat")
         .about(i18n::text("help.cat_about").to_string())
-        .arg(required_session_arg())
+        .arg(optional_session_arg())
         .arg(
             Arg::new("follow")
                 .long("follow")
@@ -171,13 +199,19 @@ fn build_cat_command() -> ClapCommand {
 fn build_input_command() -> ClapCommand {
     ClapCommand::new("input")
         .about(i18n::text("help.input_about").to_string())
-        .arg(required_session_arg())
+        .arg(optional_session_arg())
         .arg(
             Arg::new("timeout")
                 .long("timeout")
                 .value_name("SECONDS")
                 .value_parser(value_parser!(u64))
                 .help(i18n::text("help.timeout").to_string()),
+        )
+        .arg(
+            Arg::new("stopword")
+                .long("stopword")
+                .value_name("REGEX")
+                .help(i18n::text("help.stopword").to_string()),
         )
         .arg(
             Arg::new("terminate")
@@ -194,10 +228,16 @@ fn build_input_command() -> ClapCommand {
         )
 }
 
+fn build_output_command() -> ClapCommand {
+    ClapCommand::new("output")
+        .about(i18n::text("help.output_about").to_string())
+        .arg(optional_session_arg())
+}
+
 fn build_signal_command() -> ClapCommand {
     ClapCommand::new("signal")
         .about(i18n::text("help.signal_about").to_string())
-        .arg(required_session_arg())
+        .arg(optional_session_arg())
         .arg(
             Arg::new("signal")
                 .required(true)
@@ -260,26 +300,32 @@ fn from_matches(matches: ArgMatches) -> Result<Cli, clap::Error> {
         "run" | "exec" => Command::Run(RunArgs {
             name: submatches.get_one::<String>("name").cloned(),
             timeout: submatches.get_one::<u64>("timeout").copied(),
+            stopword: submatches.get_one::<String>("stopword").cloned(),
             terminate: submatches.get_flag("terminate"),
+            backend: parse_backend(submatches),
             cwd: submatches.get_one::<PathBuf>("cwd").cloned(),
             env: parse_env_vars(submatches.get_many::<String>("env"))?,
             command: required_value(submatches, "command")?,
             args: values(submatches, "args"),
         }),
         "cat" => Command::Cat(CatArgs {
-            session: required_value(submatches, "session")?,
+            session: submatches.get_one::<String>("session").cloned(),
             follow: submatches.get_flag("follow"),
             stderr: submatches.get_flag("stderr"),
         }),
+        "output" => Command::Output(OutputArgs {
+            session: submatches.get_one::<String>("session").cloned(),
+        }),
         "list" | "sessions" => Command::List,
         "input" => Command::Input(InputArgs {
-            session: required_value(submatches, "session")?,
+            session: submatches.get_one::<String>("session").cloned(),
             timeout: submatches.get_one::<u64>("timeout").copied(),
+            stopword: submatches.get_one::<String>("stopword").cloned(),
             terminate: submatches.get_flag("terminate"),
             text: required_value(submatches, "text")?,
         }),
         "signal" => Command::Signal(SignalArgs {
-            session: required_value(submatches, "session")?,
+            session: submatches.get_one::<String>("session").cloned(),
             signal: required_value(submatches, "signal")?,
         }),
         "kill" | "terminate" => Command::Kill(KillArgs {
@@ -289,7 +335,7 @@ fn from_matches(matches: ArgMatches) -> Result<Cli, clap::Error> {
         "attach" => Command::Attach(SessionArgs {
             session: required_value(submatches, "session")?,
         }),
-        "clean" => Command::Clean,
+        "clean" | "clear" => Command::Clean,
         _ => {
             return Err(clap::Error::raw(
                 ErrorKind::UnknownArgument,
@@ -334,4 +380,17 @@ fn values(matches: &ArgMatches, name: &str) -> Vec<String> {
         .flatten()
         .cloned()
         .collect()
+}
+
+fn parse_backend(matches: &ArgMatches) -> SessionBackend {
+    match matches
+        .get_one::<String>("backend")
+        .map(String::as_str)
+        .unwrap_or("pty")
+    {
+        "pty" => SessionBackend::Pty,
+        "pipe" => SessionBackend::Pipe,
+        "auto" => SessionBackend::Auto,
+        _ => unreachable!("backend value is validated by clap"),
+    }
 }

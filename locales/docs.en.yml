@@ -1,0 +1,78 @@
+docs:
+  readme:
+    title: axec
+    tagline: Daemon-backed CLI for persistent async command, shell, and REPL sessions.
+    summary: |
+      - start detached shells, REPLs, and commands behind a small daemon
+      - send more input later without losing process state
+      - stream live output or read historical and incremental logs
+      - list, signal, kill, clean, or attach to sessions from later CLI calls
+    quick_start_title: Quick Start
+    quick_start_commands: |
+      axec run --name py python
+      axec input --session py --timeout 3 "print(40 + 2)"
+      axec output --session py
+      axec list
+    docs_title: Documentation
+    docs_links: |
+      - [Guide]({{guide_path}})
+      - [Implementation Plan]({{plan_path}})
+    i18n_title: I18n Status
+    i18n_body: CLI help and docs are available in English, Simplified Chinese, and Traditional Chinese. Locale configuration examples live in the [Guide]({{guide_path}}).
+    build_title: Build
+    build_body: "Common local commands:"
+    build_commands: |
+      cargo build
+      cargo test
+      cargo run --bin render-docs
+    license_title: License
+    license_body: This project is licensed under the MIT License. See [LICENSE]({{license_path}}).
+  guide:
+    title: axec Guide
+    intro: axec keeps long-running command sessions behind a background daemon so later CLI calls can keep using the same process state.
+    overview_title: Overview
+    overview_body: |
+      Typical uses include persistent Python or Node REPLs, long-running shells, background jobs that need later inspection, and agent workflows that need to revisit process state across multiple turns.
+
+      The daemon starts automatically on first use. Sessions are tracked by UUID, optional name, status, timestamps, command line, and log files.
+    workflow_title: Core Workflows
+    workflow_body: |
+      1. Start a session with `axec run`, optionally naming it with `--name`.
+      2. Send more input later with `axec input`.
+      3. Read complete history with `axec cat`, or unread stdout with `axec output`.
+      4. Inspect active sessions with `axec list`.
+      5. Interrupt, kill, clean, or attach as needed.
+    reference_title: Command Reference
+    command_header: Command
+    behavior_header: Behavior
+    row_run: Start a session, return its UUID immediately, and optionally stream early output with `--timeout` or `--stopword`.
+    row_run_backend: Use `--backend pty` for merged terminal output, `--backend pipe` for split stdout/stderr, or `--backend auto` for heuristic selection.
+    row_cat: Print recorded stdout by default, `--stderr` when requested, and follow live output with `--follow`.
+    row_output: Print unread stdout since the last output-aware command for that session. If `--session` is omitted, the latest session is used.
+    row_list: Show tracked sessions with UUID, name, status, start time, exit time, and command line.
+    row_input: Send text to a running session, optionally stream output, and optionally stop once a regex matches.
+    row_signal: Send an OS signal such as `SIGINT`; if `--session` is omitted, the latest session is used.
+    row_kill: Force-kill a specific session or all running sessions with `--all`.
+    row_clean: Remove exited sessions and their on-disk state. `clear` is an alias.
+    row_attach: Open an interactive terminal attached to a running session. Detach with `Ctrl+\`.
+    output_modes_title: Output Modes
+    output_modes_body: |
+      `pty` is the default backend and keeps stdout/stderr merged, which is useful for agent workflows that need to read the same terminal transcript a human would see.
+
+      `pipe` mode keeps stdout and stderr separate. This is useful when you need clean stream separation for one-shot commands or structured tooling.
+    selection_title: Session Selection
+    selection_body: |
+      Anywhere `--session` is accepted, you can pass a full UUID, a unique UUID prefix, or the active session name.
+
+      `cat`, `output`, `input`, and `signal` also accept an omitted `--session`, in which case the latest started session is used.
+    localization_title: Localization
+    localization_body: "The CLI help follows your locale environment. `AXEC_LOCALE` overrides `LANG` and `LC_*` when you need a deterministic locale. Examples:"
+    localization_example: |
+      AXEC_LOCALE=zh-TW axec --help
+      LANG=zh_CN.UTF-8 axec --help
+      LANG=zh_TW.UTF-8 axec --help
+    files_title: Files and State
+    files_body: |
+      By default, runtime socket and pid files live under `$XDG_RUNTIME_DIR/axec/` when available, otherwise `~/.axec/axec/`.
+
+      Session metadata and logs live under `~/.axec/sessions/<uuid>/`, including `meta.json`, `stdout.log`, and `stderr.log`.

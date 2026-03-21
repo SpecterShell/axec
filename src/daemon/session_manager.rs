@@ -1,3 +1,4 @@
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
@@ -87,6 +88,19 @@ impl SessionManager {
         }
     }
 
+    pub fn latest_session(&self) -> Result<Arc<Session>> {
+        let inner = self.inner.lock().expect("session manager mutex poisoned");
+        inner
+            .sessions
+            .values()
+            .max_by_key(|session| {
+                let info = session.info();
+                (info.started_at, info.uuid)
+            })
+            .cloned()
+            .ok_or_else(|| AxecError::Protocol("no sessions are available".to_string()))
+    }
+
     pub fn list_sessions(&self) -> Vec<SessionInfo> {
         let mut inner = self.inner.lock().expect("session manager mutex poisoned");
         Self::prune_names_locked(&mut inner);
@@ -95,7 +109,7 @@ impl SessionManager {
             .values()
             .map(|session| session.info())
             .collect::<Vec<_>>();
-        sessions.sort_by(|left, right| left.uuid.cmp(&right.uuid));
+        sessions.sort_by_key(|session| (Reverse(session.started_at), session.uuid));
         sessions
     }
 

@@ -1,0 +1,78 @@
+docs:
+  readme:
+    title: axec
+    tagline: 面向持久化异步命令、Shell 与 REPL 会话的守护进程式 CLI。
+    summary: |
+      - 通过一个小型守护进程启动分离式 Shell、REPL 与命令
+      - 在不丢失进程状态的前提下，后续继续向同一会话发送输入
+      - 流式读取实时输出，或查看历史与增量日志
+      - 在之后的 CLI 调用中列出、发信号、终止、清理或附加到会话
+    quick_start_title: 快速开始
+    quick_start_commands: |
+      axec run --name py python
+      axec input --session py --timeout 3 "print(40 + 2)"
+      axec output --session py
+      axec list
+    docs_title: 文档
+    docs_links: |
+      - [使用指南]({{guide_path}})
+      - [实现计划]({{plan_path}})
+    i18n_title: 国际化状态
+    i18n_body: CLI 帮助与文档已提供英文、简体中文和繁体中文。区域设置示例已移动到 [使用指南]({{guide_path}})。
+    build_title: 构建
+    build_body: "常用本地命令："
+    build_commands: |
+      cargo build
+      cargo test
+      cargo run --bin render-docs
+    license_title: 许可
+    license_body: 本项目基于 MIT License 发布。参见 [LICENSE]({{license_path}})。
+  guide:
+    title: axec 使用指南
+    intro: axec 会把长时间运行的命令会话放在后台守护进程之后，这样后续的 CLI 调用就能继续使用同一个进程状态。
+    overview_title: 概览
+    overview_body: |
+      常见用法包括持久化的 Python 或 Node REPL、长时间运行的 Shell、需要后续检查的后台任务，以及需要在多轮之间反复访问进程状态的代理工作流。
+
+      守护进程会在首次使用时自动启动。会话会按 UUID、可选名称、状态、时间戳、命令行和日志文件进行跟踪。
+    workflow_title: 核心工作流
+    workflow_body: |
+      1. 使用 `axec run` 启动会话，并可通过 `--name` 指定名称。
+      2. 稍后通过 `axec input` 继续发送输入。
+      3. 使用 `axec cat` 读取完整历史，或用 `axec output` 读取未读 stdout。
+      4. 通过 `axec list` 查看活动会话。
+      5. 按需中断、终止、清理或附加到会话。
+    reference_title: 命令参考
+    command_header: 命令
+    behavior_header: 行为
+    row_run: 启动一个会话，立即返回其 UUID，并可通过 `--timeout` 或 `--stopword` 流式读取早期输出。
+    row_run_backend: 通过 `--backend pty` 使用合并终端输出，通过 `--backend pipe` 使用分离的 stdout/stderr，或通过 `--backend auto` 使用启发式选择。
+    row_cat: 默认打印已记录的 stdout，带 `--stderr` 时打印 stderr，并可通过 `--follow` 跟随实时输出。
+    row_output: 打印该会话自上次输出感知命令以来未读的 stdout。省略 `--session` 时会使用最新会话。
+    row_list: 显示已跟踪会话的 UUID、名称、状态、开始时间、退出时间和命令行。
+    row_input: 向运行中的会话发送文本，可选地流式读取输出，并可在正则匹配后停止。
+    row_signal: 发送类似 `SIGINT` 的操作系统信号；省略 `--session` 时会使用最新会话。
+    row_kill: 强制终止指定会话，或使用 `--all` 终止所有运行中的会话。
+    row_clean: 删除已退出的会话及其磁盘状态。`clear` 是别名。
+    row_attach: 打开一个附加到运行中会话的交互式终端。使用 `Ctrl+\` 断开附加。
+    output_modes_title: 输出模式
+    output_modes_body: |
+      `pty` 是默认后端，会保持 stdout/stderr 合并；这对需要读取与人类终端相同转录内容的代理工作流很有用。
+
+      `pipe` 模式会分离 stdout 和 stderr。当你需要为一次性命令或结构化工具提供干净的流分离时，这很有用。
+    selection_title: 会话选择
+    selection_body: |
+      在所有接受 `--session` 的地方，你都可以传入完整 UUID、唯一 UUID 前缀，或活动会话名称。
+
+      `cat`、`output`、`input` 和 `signal` 也允许省略 `--session`，此时会使用最近启动的会话。
+    localization_title: 本地化
+    localization_body: CLI 帮助会跟随你的区域设置环境变量。若需要确定性的语言选择，可使用 `AXEC_LOCALE` 覆盖 `LANG` 与 `LC_*`。示例：
+    localization_example: |
+      AXEC_LOCALE=zh-TW axec --help
+      LANG=zh_CN.UTF-8 axec --help
+      LANG=zh_TW.UTF-8 axec --help
+    files_title: 文件与状态
+    files_body: |
+      默认情况下，运行时 socket 和 pid 文件会存放在 `$XDG_RUNTIME_DIR/axec/` 下；若不可用，则使用 `~/.axec/axec/`。
+
+      会话元数据与日志会存放在 `~/.axec/sessions/<uuid>/` 下，其中包括 `meta.json`、`stdout.log` 和 `stderr.log`。
