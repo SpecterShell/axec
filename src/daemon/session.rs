@@ -10,6 +10,7 @@ use portable_pty::{Child, ChildKiller, CommandBuilder, PtySize, native_pty_syste
 #[cfg(unix)]
 use std::process::{Child as StdChild, Command as StdCommand, Stdio};
 use tokio::sync::{broadcast, watch};
+#[cfg(windows)]
 use tracing::debug;
 use uuid::Uuid;
 
@@ -91,6 +92,7 @@ pub struct Session {
     session_dir: PathBuf,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     killer: Option<Arc<Mutex<Box<dyn SessionKiller>>>>,
+    #[cfg(windows)]
     interrupt_via_stdin: bool,
     carriage_return_newlines: bool,
     stdout: Arc<OutputBuffer>,
@@ -145,6 +147,7 @@ impl Session {
             session_dir,
             writer: Arc::new(Mutex::new(spawned.writer)),
             killer: spawned.killer.map(|killer| Arc::new(Mutex::new(killer))),
+            #[cfg(windows)]
             interrupt_via_stdin: spawned.interrupt_via_stdin,
             carriage_return_newlines: spawned.carriage_return_newlines,
             stdout: stdout.clone(),

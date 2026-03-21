@@ -31,10 +31,10 @@ pub fn ensure_base_dirs() -> Result<()> {
 pub fn socket_path() -> Result<PathBuf> {
     #[cfg(windows)]
     {
-        return Ok(PathBuf::from(format!(
+        Ok(PathBuf::from(format!(
             r"\\.\pipe\{}-daemon",
             config::APP_NAME
-        )));
+        )))
     }
 
     #[cfg(not(windows))]
