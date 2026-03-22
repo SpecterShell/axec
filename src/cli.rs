@@ -394,3 +394,35 @@ fn parse_backend(matches: &ArgMatches) -> SessionBackend {
         _ => unreachable!("backend value is validated by clap"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Command, build_command, from_matches};
+    use crate::protocol::SessionBackend;
+
+    #[test]
+    fn run_defaults_backend_to_pty() {
+        let matches = build_command()
+            .try_get_matches_from(["axec", "run", "echo"])
+            .expect("run command should parse");
+        let cli = from_matches(matches).expect("cli should parse");
+
+        match cli.command {
+            Command::Run(args) => assert_eq!(args.backend, SessionBackend::Pty),
+            other => panic!("expected run command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_accepts_explicit_auto_backend() {
+        let matches = build_command()
+            .try_get_matches_from(["axec", "run", "--backend", "auto", "echo"])
+            .expect("run command should parse");
+        let cli = from_matches(matches).expect("cli should parse");
+
+        match cli.command {
+            Command::Run(args) => assert_eq!(args.backend, SessionBackend::Auto),
+            other => panic!("expected run command, got {other:?}"),
+        }
+    }
+}

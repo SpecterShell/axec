@@ -14,6 +14,10 @@
 
 {{docs.guide.workflow_body}}
 
+## {{docs.guide.recipes_title}}
+
+{{docs.guide.recipes_body}}
+
 ## {{docs.guide.reference_title}}
 
 | {{docs.guide.command_header}} | {{docs.guide.behavior_header}} |

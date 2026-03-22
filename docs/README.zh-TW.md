@@ -4,14 +4,14 @@
 
 [English](../README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
 
-面向持久化非同步命令、Shell 與 REPL 工作階段的守護行程式 CLI。
+用於持久化非同步命令、Shell 與 REPL 工作階段的守護程序式 CLI 工具。
 
-- 透過一個小型守護行程啟動分離式 Shell、REPL 與命令
-- 在不遺失程序狀態的前提下，後續繼續向同一工作階段傳送輸入
-- 串流讀取即時輸出，或查看歷史與增量日誌
-- 在之後的 CLI 呼叫中列出、發送訊號、終止、清理或附加到工作階段
+- 透過輕量守護程序啟動獨立的 Shell、REPL 與命令工作階段
+- 不需中斷程序狀態，可隨時向同一工作階段傳送後續輸入
+- 支援串流讀取即時輸出，或檢視歷史紀錄與增量日誌
+- 後續可透過 CLI 指令列出工作階段、發送信號、終止、清理或連接工作階段
 
-## 快速開始
+## 快速入門
 
 ```bash
 axec run --name py python
@@ -20,18 +20,14 @@ axec output --session py
 axec list
 ```
 
-## 文件
+## 說明文件
 
 - [使用指南](guide.zh-TW.md)
-- [實作計畫](PLAN.md)
+- [開發路線圖](PLAN.md)
 
-## 國際化狀態
+## 建置方式
 
-CLI 說明與文件已提供英文、簡體中文與繁體中文。地區設定範例已移至 [使用指南](guide.zh-TW.md)。
-
-## 建置
-
-常用本地命令：
+常用本機建置指令：
 
 ```bash
 cargo build
@@ -39,6 +35,6 @@ cargo test
 cargo run --bin render-docs
 ```
 
-## 授權
+## 授權條款
 
-本專案以 MIT License 發布。請參考 [LICENSE](../LICENSE)。
+本專案採用 MIT 授權條款釋出，詳情請參閱 [LICENSE](../LICENSE)。

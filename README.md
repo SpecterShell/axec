@@ -25,10 +25,6 @@ axec list
 - [Guide](docs/guide.md)
 - [Implementation Plan](docs/PLAN.md)
 
-## I18n Status
-
-CLI help and docs are available in English, Simplified Chinese, and Traditional Chinese. Locale configuration examples live in the [Guide](docs/guide.md).
-
 ## Build
 
 Common local commands:

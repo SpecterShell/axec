@@ -18,10 +18,6 @@
 
 {{docs.readme.docs_links}}
 
-## {{docs.readme.i18n_title}}
-
-{{docs.readme.i18n_body}}
-
 ## {{docs.readme.build_title}}
 
 {{docs.readme.build_body}}

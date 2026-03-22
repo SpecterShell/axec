@@ -12,20 +12,117 @@ Typical uses include persistent Python or Node REPLs, long-running shells, backg
 
 The daemon starts automatically on first use. Sessions are tracked by UUID, optional name, status, timestamps, command line, and log files.
 
-## Core Workflows
+## Core Workflow
 
-1. Start a session with `axec run`, optionally naming it with `--name`.
-2. Send more input later with `axec input`.
-3. Read complete history with `axec cat`, or unread stdout with `axec output`.
-4. Inspect active sessions with `axec list`.
-5. Interrupt, kill, clean, or attach as needed.
+1. Inspect current state before starting new sessions:
+
+   ```bash
+   target/debug/axec list
+   target/debug/axec list --json
+   ```
+
+2. Start a named session when the session will be reused:
+
+   ```bash
+   target/debug/axec run --name py python3
+   target/debug/axec run --name shell bash
+   ```
+
+3. Send more input later:
+
+   ```bash
+   target/debug/axec input --session py --timeout 3 "print(40 + 2)"
+   target/debug/axec input --session shell "echo ready"
+   ```
+
+4. Read output with the right command:
+
+   ```bash
+   target/debug/axec output --session py
+   target/debug/axec cat --session py
+   target/debug/axec cat --session py --stderr
+   target/debug/axec cat --session py --follow
+   ```
+
+5. Clean up sessions started for verification:
+
+   ```bash
+   target/debug/axec kill --session py
+   target/debug/axec clean
+   ```
+
+## Advanced Commands
+
+- Send multi-line input through stdin with `-`:
+
+  ```bash
+  target/debug/axec input --session py - <<'EOF'
+  x = 40
+  y = 2
+  print(x + y)
+  EOF
+  ```
+
+- Send multi-line input from a pipe:
+
+  ```bash
+  printf 'first line\nsecond line\n' | target/debug/axec input --session shell -
+  ```
+
+- Wait for a stopword while sending input:
+
+  ```bash
+  target/debug/axec input --session py --stopword 'ready|done' "run_job()"
+  ```
+
+- Start a non-interactive command and keep stdout and stderr separated:
+
+  ```bash
+  target/debug/axec run --name build --backend pipe sh -c 'echo out; echo err >&2'
+  target/debug/axec cat --session build
+  target/debug/axec cat --session build --stderr
+  ```
+
+- Use `--backend auto` for one-shot command checks:
+
+  ```bash
+  target/debug/axec run --name check --backend auto sh -c 'echo ok; echo warn >&2; sleep 1'
+  target/debug/axec list --json
+  ```
+
+- Reuse the latest session intentionally:
+
+  ```bash
+  target/debug/axec output
+  target/debug/axec input "echo follow-up"
+  ```
+
+- Target a session by unique UUID prefix:
+
+  ```bash
+  target/debug/axec list
+  target/debug/axec cat --session 2a40f9d2
+  ```
+
+- Follow live output after printing history:
+
+  ```bash
+  target/debug/axec cat --session build --follow
+  ```
+
+- Interrupt gracefully before force-killing:
+
+  ```bash
+  target/debug/axec signal --session py SIGINT
+  target/debug/axec kill --session py
+  ```
 
 ## Command Reference
 
 | Command | Behavior |
 |---|---|
 | `axec run [--name NAME] [--timeout N] [--terminate] [--stopword REGEX] [--backend pty\|pipe\|auto] [--cwd DIR] [--env K=V]... <cmd> [args]` | Start a session, return its UUID immediately, and optionally stream early output with `--timeout` or `--stopword`. |
-| `axec run --backend pipe <cmd>` | Use `--backend pty` for merged terminal output, `--backend pipe` for split stdout/stderr, or `--backend auto` for heuristic selection. |
+| `axec run --backend pipe <cmd>` | `--backend pty` is the default and keeps merged terminal output; `pipe` forces split stdout/stderr, while `auto` uses heuristics to prefer `pipe` for non-interactive commands. |
 | `axec cat [--session UUID\|NAME] [--follow] [--stderr]` | Print recorded stdout by default, `--stderr` when requested, and follow live output with `--follow`. |
 | `axec output [--session UUID\|NAME]` | Print unread stdout since the last output-aware command for that session. If `--session` is omitted, the latest session is used. |
 | `axec list` | Show tracked sessions with UUID, name, status, start time, exit time, and command line. |
@@ -37,9 +134,9 @@ The daemon starts automatically on first use. Sessions are tracked by UUID, opti
 
 ## Output Modes
 
-`pty` is the default backend and keeps stdout/stderr merged, which is useful for agent workflows that need to read the same terminal transcript a human would see.
+`pty` is the default backend. It keeps stdout/stderr merged for fully interactive terminal sessions.
 
-`pipe` mode keeps stdout and stderr separate. This is useful when you need clean stream separation for one-shot commands or structured tooling.
+`pipe` keeps them separate for one-shot commands and structured tooling, while `auto` applies platform heuristics and may prefer `pipe` for non-interactive workloads.
 
 ## Session Selection
 

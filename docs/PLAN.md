@@ -10,7 +10,7 @@ Current implementation status:
 
 - Unix and Windows runtime support are implemented
 - daemon auto-start and idle shutdown are implemented
-- `pty` is the default session backend; `pipe` and `auto` are available when separate stdout/stderr is needed
+- `pty` is the default session backend; `auto` still prefers `pipe` for split stdout/stderr when heuristics say a command is non-interactive
 - `run`, `exec`, `list`, `cat`, `output`, `input`, `signal`, `kill`, `terminate`, `clean`, `clear`, and `attach` are implemented
 - `--json` output is implemented
 - partial UUID lookup is implemented when the prefix is unique
@@ -26,7 +26,7 @@ Known gaps:
 **Daemon + CLI client** over Unix socket (Linux/macOS) / named pipe (Windows).
 
 - The daemon auto-starts on first CLI command and auto-stops after idle timeout
-- Sessions use a PTY by default so interactive REPLs work naturally, with an optional pipe backend for split stdout/stderr
+- Sessions default to `pty`, while `auto` remains available when heuristic PTY/pipe selection is preferred
 - Output is captured to both an in-memory ring buffer (fast streaming) and append-only log files (stdout.log + stderr.log for full history)
 - Wire protocol: length-delimited JSON frames over the socket
 

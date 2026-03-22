@@ -1,29 +1,29 @@
 help:
-  app_about: 用於管理長時間執行 REPL 與命令工作階段的非同步命令執行 CLI
-  json: 輸出結構化 JSON 回應
-  list_about: 列出目前追蹤的工作階段
-  run_about: 啟動背景命令；只有要求串流輸出時才保持前景等待
-  cat_about: 列印工作階段輸出歷史，並可選擇持續跟隨新輸出
-  output_about: 列印該工作階段自上次輸出感知命令之後產生的 stdout
-  input_about: 向執行中的工作階段傳送輸入
+  app_about: 用於託管長時間執行 REPL 與命令工作階段的非同步命令執行 CLI 工具
+  json: 以結構化 JSON 格式輸出回應結果
+  list_about: 列出目前所有被追蹤的工作階段
+  run_about: 在背景啟動命令；僅當要求串流輸出時保持前景阻塞
+  cat_about: 列印工作階段歷史輸出，可選擇持續追蹤後續新增輸出
+  output_about: 列印該工作階段自上次輸出類指令執行後新增的標準輸出內容
+  input_about: 向執行中的工作階段傳送輸入內容
   signal_about: 向執行中的工作階段傳送作業系統訊號
   kill_about: 強制終止執行中的工作階段
-  attach_about: 互動式附加到某個工作階段
-  clean_about: 刪除已退出的工作階段及其磁碟狀態
-  name: 工作階段的可選唯一名稱
-  timeout: 串流輸出 N 秒後返回
-  stopword: 等待直到輸出符合此正則表達式
-  terminate: 達到逾時時終止工作階段，或持續等待到其自然結束
-  backend: "工作階段 I/O 後端：`pty` 會合併終端輸出，`pipe` 會分離 stdout/stderr，`auto` 會使用平台啟發式選擇"
+  attach_about: 以互動模式連接指定工作階段
+  clean_about: 刪除已退出的工作階段及其磁碟儲存的狀態資料
+  name: 工作階段的可選唯一識別名稱
+  timeout: 串流輸出持續 N 秒後自動返回
+  stopword: 持續等待直到輸出符合指定正規表示式後返回
+  terminate: 逾時後自動終止工作階段，否則將持續等待直到工作階段自然結束
+  backend: "工作階段 I/O 後端模式：`pty`（預設）合併終端輸出串流；`pipe` 分離標準輸出/標準錯誤；`auto` 基於平台特性啟發式選擇"
   cwd: 啟動命令時使用的工作目錄
-  env: 以 K=V 形式設定環境變數覆蓋
-  command: 要執行的命令
-  follow: 列印歷史後繼續串流跟隨新輸出
-  stderr: 顯示 stderr 歷史而不是 stdout 歷史
-  input_text: 要傳送到工作階段的文字，或使用 - 從 stdin 讀取
-  signal: 訊號名稱或編號
-  session: 工作階段 UUID 或啟用中的名稱
+  env: 以 K=V 格式傳入，覆蓋預設環境變數
+  command: 欲執行的命令
+  follow: 列印歷史輸出後繼續串流追蹤後續新增輸出
+  stderr: 顯示標準錯誤歷史，而非預設的標準輸出歷史
+  input_text: 要傳送到工作階段的文字內容，使用 `-` 則從標準輸入讀取
+  signal: 訊號名稱或訊號編號
+  session: 工作階段 UUID 或活躍工作階段名稱
   all: 作用於所有執行中且被追蹤的工作階段
-  missing_subcommand: 必須提供子命令
+  missing_subcommand: 請指定要執行的子指令
   unknown_command: 未知命令
-  invalid_env: --env 需要 K=V 格式
+  invalid_env: --env 參數需符合 K=V 格式

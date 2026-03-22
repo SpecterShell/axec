@@ -14,7 +14,7 @@ help:
   timeout: Stream output for N seconds before returning
   stopword: Wait until output matches this regex
   terminate: Terminate the session if the timeout is reached or wait until it exits naturally
-  backend: "Session I/O backend: `pty` merges terminal output, `pipe` splits stdout/stderr, `auto` uses platform heuristics"
+  backend: "Session I/O backend: `pty` (default) merges terminal output, `pipe` splits stdout/stderr, `auto` uses platform heuristics"
   cwd: Working directory for the spawned command
   env: Environment override in K=V form
   command: Command to execute

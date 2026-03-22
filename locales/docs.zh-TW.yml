@@ -1,78 +1,162 @@
+
 docs:
   readme:
     title: axec
-    tagline: 面向持久化非同步命令、Shell 與 REPL 工作階段的守護行程式 CLI。
+    tagline: 用於持久化非同步命令、Shell 與 REPL 工作階段的守護程序式 CLI 工具。
     summary: |
-      - 透過一個小型守護行程啟動分離式 Shell、REPL 與命令
-      - 在不遺失程序狀態的前提下，後續繼續向同一工作階段傳送輸入
-      - 串流讀取即時輸出，或查看歷史與增量日誌
-      - 在之後的 CLI 呼叫中列出、發送訊號、終止、清理或附加到工作階段
-    quick_start_title: 快速開始
+      - 透過輕量守護程序啟動獨立的 Shell、REPL 與命令工作階段
+      - 不需中斷程序狀態，可隨時向同一工作階段傳送後續輸入
+      - 支援串流讀取即時輸出，或檢視歷史紀錄與增量日誌
+      - 後續可透過 CLI 指令列出工作階段、發送信號、終止、清理或連接工作階段
+    quick_start_title: 快速入門
     quick_start_commands: |
       axec run --name py python
       axec input --session py --timeout 3 "print(40 + 2)"
       axec output --session py
       axec list
-    docs_title: 文件
+    docs_title: 說明文件
     docs_links: |
       - [使用指南]({{guide_path}})
-      - [實作計畫]({{plan_path}})
-    i18n_title: 國際化狀態
-    i18n_body: CLI 說明與文件已提供英文、簡體中文與繁體中文。地區設定範例已移至 [使用指南]({{guide_path}})。
-    build_title: 建置
-    build_body: "常用本地命令："
+      - [開發路線圖]({{plan_path}})
+    build_title: 建置方式
+    build_body: "常用本機建置指令："
     build_commands: |
       cargo build
       cargo test
       cargo run --bin render-docs
-    license_title: 授權
-    license_body: 本專案以 MIT License 發布。請參考 [LICENSE]({{license_path}})。
+    license_title: 授權條款
+    license_body: 本專案採用 MIT 授權條款釋出，詳情請參閱 [LICENSE]({{license_path}})。
   guide:
-    title: axec 使用指南
-    intro: axec 會把長時間執行的命令工作階段放在背景守護行程之後，讓後續的 CLI 呼叫可以繼續使用同一個程序狀態。
-    overview_title: 概覽
+    title: 使用指南
+    intro: axec 會將長時間執行的命令工作階段託管在背景守護程序中，後續呼叫 CLI 時即可重複使用原有程序狀態。
+    overview_title: 功能總覽
     overview_body: |
-      常見用法包括持久化的 Python 或 Node REPL、長時間執行的 Shell、需要後續檢查的背景工作，以及需要在多輪之間反覆存取程序狀態的代理工作流程。
+      常見使用場景包含持久化 Python/Node REPL 環境、常駐 Shell 程序、需後續追蹤狀態的背景任務，以及需在多輪互動中保留程序狀態的代理工作流程。
 
-      守護行程會在首次使用時自動啟動。工作階段會依照 UUID、可選名稱、狀態、時間戳、命令列與日誌檔進行追蹤。
-    workflow_title: 核心工作流程
+      守護程序會在首次呼叫時自動啟動，所有工作階段將透過 UUID、可選名稱、狀態、時間戳、啟動指令與日誌檔進行追蹤。
+    workflow_title: 核心指令
     workflow_body: |
-      1. 使用 `axec run` 啟動工作階段，並可透過 `--name` 指定名稱。
-      2. 稍後透過 `axec input` 繼續傳送輸入。
-      3. 使用 `axec cat` 讀取完整歷史，或用 `axec output` 讀取未讀 stdout。
-      4. 透過 `axec list` 查看啟用中的工作階段。
-      5. 依需求中斷、終止、清理或附加到工作階段。
-    reference_title: 命令參考
-    command_header: 命令
-    behavior_header: 行為
-    row_run: 啟動一個工作階段，立即回傳其 UUID，並可透過 `--timeout` 或 `--stopword` 串流讀取早期輸出。
-    row_run_backend: 透過 `--backend pty` 使用合併終端輸出，透過 `--backend pipe` 使用分離的 stdout/stderr，或透過 `--backend auto` 使用啟發式選擇。
-    row_cat: 預設列印已記錄的 stdout，帶 `--stderr` 時列印 stderr，並可透過 `--follow` 跟隨即時輸出。
-    row_output: 列印該工作階段自上次輸出感知命令以來未讀的 stdout。省略 `--session` 時會使用最新工作階段。
-    row_list: 顯示已追蹤工作階段的 UUID、名稱、狀態、開始時間、結束時間與命令列。
-    row_input: 向執行中的工作階段傳送文字，可選擇串流讀取輸出，並可在正則符合後停止。
-    row_signal: 傳送類似 `SIGINT` 的作業系統訊號；省略 `--session` 時會使用最新工作階段。
-    row_kill: 強制終止指定工作階段，或使用 `--all` 終止所有執行中的工作階段。
-    row_clean: 刪除已退出的工作階段及其磁碟狀態。`clear` 是別名。
-    row_attach: 開啟一個附加到執行中工作階段的互動式終端。使用 `Ctrl+\` 中斷附加。
-    output_modes_title: 輸出模式
+      1. 啟動新工作階段前可先檢視當前工作階段狀態：
+
+         ```bash
+         target/debug/axec list
+         target/debug/axec list --json
+         ```
+
+      2. 如需重複使用工作階段，可啟動具名工作階段：
+
+         ```bash
+         target/debug/axec run --name py python3
+         target/debug/axec run --name shell bash
+         ```
+
+      3. 後續可向已存在的工作階段傳送輸入：
+
+         ```bash
+         target/debug/axec input --session py --timeout 3 "print(40 + 2)"
+         target/debug/axec input --session shell "echo ready"
+         ```
+
+      4. 可依場景選擇合適的輸出讀取指令：
+
+         ```bash
+         target/debug/axec output --session py
+         target/debug/axec cat --session py
+         target/debug/axec cat --session py --stderr
+         target/debug/axec cat --session py --follow
+         ```
+
+      5. 清理測試用途的臨時工作階段：
+
+         ```bash
+         target/debug/axec kill --session py
+         target/debug/axec clean
+         ```
+    recipes_title: 進階用法
+    recipes_body: |
+      - 透過 `-` 參數從標準輸入傳送多行內容：
+
+        ```bash
+        target/debug/axec input --session py - <<'EOF'
+        x = 40
+        y = 2
+        print(x + y)
+        EOF
+        ```
+
+      - 透過管線傳遞多行輸入：
+
+        ```bash
+        printf 'first line\nsecond line\n' | target/debug/axec input --session shell -
+        ```
+
+      - 傳送輸入後等待指定終止詞（stopword）回傳：
+
+        ```bash
+        target/debug/axec input --session py --stopword 'ready|done' "run_job()"
+        ```
+
+      - 啟動非互動式命令並保持標準輸出與標準錯誤分離：
+
+        ```bash
+        target/debug/axec run --name build --backend pipe sh -c 'echo out; echo err >&2'
+        target/debug/axec cat --session build
+        target/debug/axec cat --session build --stderr
+        ```
+
+      - 執行一次性檢查類命令時使用 `--backend auto` 參數：
+
+        ```bash
+        target/debug/axec run --name check --backend auto sh -c 'echo ok; echo warn >&2; sleep 1'
+        target/debug/axec list --json
+        ```
+
+      - 直接重複使用最近建立的工作階段：
+
+        ```bash
+        target/debug/axec output
+        target/debug/axec input "echo follow-up"
+        ```
+
+      - 透過 UUID 唯一前綴定位工作階段：
+
+        ```bash
+        target/debug/axec list
+        target/debug/axec cat --session 2a40f9d2
+        ```
+
+      - 輸出歷史日誌後持續追蹤即時輸出：
+
+        ```bash
+        target/debug/axec cat --session build --follow
+        ```
+
+      - 強制終止工作階段前先傳送優雅中斷訊號：
+
+        ```bash
+        target/debug/axec signal --session py SIGINT
+        target/debug/axec kill --session py
+        ```
+    reference_title: 指令參考
+    command_header: 指令
+    behavior_header: 功能說明
+    row_run: 啟動新工作階段，立即回傳工作階段 UUID，可搭配 `--timeout` 或 `--stopword` 串流讀取初始輸出。
+    row_run_backend: "`--backend pty` 為預設值，會合併終端的標準輸出與標準錯誤；`pipe` 模式會強制分離兩個輸出串流；`auto` 模式會透過啟發式策略，在非互動場景下優先選擇 `pipe`。"
+    row_cat: 預設輸出已記錄的標準輸出，加入 `--stderr` 參數時輸出標準錯誤，可搭配 `--follow` 即時追蹤後續輸出。
+    row_output: 輸出該工作階段自上次輸出類指令執行後新增的標準輸出內容，省略 `--session` 時預設使用最近建立的工作階段。
+    row_list: 顯示所有已追蹤工作階段的 UUID、名稱、狀態、啟動時間、結束時間與啟動指令。
+    row_input: 向執行中的工作階段傳送文字內容，可選擇開啟串流輸出讀取，可設定正規比對終止條件。
+    row_signal: 向工作階段傳送作業系統訊號（如 `SIGINT`），省略 `--session` 時預設使用最近建立的工作階段。
+    row_kill: 強制終止指定工作階段，搭配 `--all` 參數可終止所有執行中的工作階段。
+    row_clean: 刪除已退出的工作階段及其磁碟儲存的狀態資料，`clear` 為該指令的別名。
+    row_attach: 開啟互動式終端連接執行中的工作階段，使用 `Ctrl+\` 快速鍵中斷工作階段連線。
+    output_modes_title: 輸出模式說明
     output_modes_body: |
-      `pty` 是預設後端，會保持 stdout/stderr 合併；這對需要讀取與人類終端相同轉錄內容的代理工作流程很有用。
+      `pty` 為預設後端，適用於全互動終端場景，會合併標準輸出與標準錯誤。
 
-      `pipe` 模式會分離 stdout 與 stderr。當你需要為一次性命令或結構化工具提供乾淨的串流分離時，這很有用。
-    selection_title: 工作階段選擇
+      `pipe` 適用於一次性命令與結構化工具場景，會分離兩個輸出串流；`auto` 模式會基於平台特性自動判斷，非互動負載下通常會優先選擇 `pipe`。
+    selection_title: 工作階段選擇規則
     selection_body: |
-      在所有接受 `--session` 的地方，你都可以傳入完整 UUID、唯一 UUID 前綴，或啟用中的工作階段名稱。
+      所有支援 `--session` 參數的指令，均可傳入完整 UUID、唯一 UUID 前綴或活躍工作階段的名稱定位目標工作階段。
 
-      `cat`、`output`、`input` 與 `signal` 也允許省略 `--session`，此時會使用最近啟動的工作階段。
-    localization_title: 本地化
-    localization_body: CLI 說明會跟隨你的地區設定環境變數。若需要確定的語言選擇，可使用 `AXEC_LOCALE` 覆蓋 `LANG` 與 `LC_*`。範例：
-    localization_example: |
-      AXEC_LOCALE=zh-TW axec --help
-      LANG=zh_CN.UTF-8 axec --help
-      LANG=zh_TW.UTF-8 axec --help
-    files_title: 檔案與狀態
-    files_body: |
-      預設情況下，執行時 socket 與 pid 檔案會存放在 `$XDG_RUNTIME_DIR/axec/` 下；若不可用，則使用 `~/.axec/axec/`。
-
-      工作階段中繼資料與日誌會存放在 `~/.axec/sessions/<uuid>/` 下，其中包含 `meta.json`、`stdout.log` 與 `stderr.log`。
+      `cat`、`output`、`input`、`signal` 四個指令支援省略 `--session` 參數，此時會自動選擇最近啟動的工作階段。

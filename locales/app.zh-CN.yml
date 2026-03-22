@@ -1,29 +1,29 @@
 help:
-  app_about: 用于管理长时间运行 REPL 和命令会话的异步命令执行 CLI
-  json: 输出结构化 JSON 响应
-  list_about: 列出当前跟踪的会话
-  run_about: 启动后台命令；只有请求流式输出时才保持前台等待
-  cat_about: 打印会话输出历史，并可选择持续跟随新输出
-  output_about: 打印该会话自上次输出感知命令之后产生的 stdout
-  input_about: 向正在运行的会话发送输入
-  signal_about: 向正在运行的会话发送操作系统信号
-  kill_about: 强制终止正在运行的会话
-  attach_about: 交互式附加到某个会话
-  clean_about: 删除已退出的会话及其磁盘状态
-  name: 会话的可选唯一名称
-  timeout: 流式输出 N 秒后返回
-  stopword: 等待直到输出匹配此正则表达式
-  terminate: 达到超时时终止会话，或一直等待到其自然退出
-  backend: "会话 I/O 后端：`pty` 合并终端输出，`pipe` 分离 stdout/stderr，`auto` 使用平台启发式选择"
+  app_about: 用于托管长运行 REPL 与命令会话的异步命令执行 CLI 工具
+  json: 以结构化 JSON 格式输出响应结果
+  list_about: 列出当前所有被追踪的会话
+  run_about: 后台启动命令；仅当请求流式输出时保持前台阻塞
+  cat_about: 打印会话历史输出，可选择持续追踪后续新增输出
+  output_about: 打印该会话自上次输出类命令执行后新增的标准输出内容
+  input_about: 向运行中的会话发送输入内容
+  signal_about: 向运行中的会话发送操作系统信号
+  kill_about: 强制终止运行中的会话
+  attach_about: 以交互模式接入指定会话
+  clean_about: 删除已退出的会话及其磁盘存储的状态数据
+  name: 会话的可选唯一标识名称
+  timeout: 流式输出持续 N 秒后自动返回
+  stopword: 持续等待直到输出匹配指定正则表达式后返回
+  terminate: 超时后自动终止会话，否则将持续等待直到会话自然退出
+  backend: "会话 I/O 后端模式：`pty`（默认）合并终端输出流；`pipe` 分离标准输出/标准错误；`auto` 基于平台特性启发式选择"
   cwd: 启动命令时使用的工作目录
-  env: 以 K=V 形式设置环境变量覆盖
-  command: 要执行的命令
-  follow: 打印历史后继续流式跟随新输出
-  stderr: 显示 stderr 历史而不是 stdout 历史
-  input_text: 要发送到会话的文本，或使用 - 从 stdin 读取
-  signal: 信号名称或编号
-  session: 会话 UUID 或活动名称
-  all: 作用于所有正在运行且被跟踪的会话
-  missing_subcommand: 必须提供子命令
+  env: 以 K=V 格式传入，覆盖默认环境变量
+  command: 待执行的命令
+  follow: 打印历史输出后继续流式追踪后续新增输出
+  stderr: 显示标准错误历史，而非默认的标准输出历史
+  input_text: 要发送到会话的文本内容，使用 `-` 则从标准输入读取
+  signal: 信号名称或信号编号
+  session: 会话 UUID 或活跃会话名称
+  all: 作用于所有运行中且被追踪的会话
+  missing_subcommand: 请指定要执行的子命令
   unknown_command: 未知命令
-  invalid_env: --env 需要 K=V 格式
+  invalid_env: --env 参数需遵循 K=V 格式

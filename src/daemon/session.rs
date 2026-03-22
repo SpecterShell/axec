@@ -17,8 +17,6 @@ use uuid::Uuid;
 #[cfg(windows)]
 use conpty::Process;
 #[cfg(windows)]
-use std::ffi::OsStr;
-#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 use std::process::{Child as StdChild, Command, Stdio};
@@ -413,8 +411,15 @@ fn now_timestamp_millis() -> i64 {
 #[cfg(unix)]
 fn spawn_process(spec: &SessionSpec) -> Result<SpawnedSession> {
     match spec.backend {
-        SessionBackend::Pty | SessionBackend::Auto => spawn_unix_pty_process(spec),
+        SessionBackend::Pty => spawn_unix_pty_process(spec),
         SessionBackend::Pipe => spawn_unix_piped_process(spec),
+        SessionBackend::Auto => {
+            if should_use_unix_pipes(spec) {
+                spawn_unix_piped_process(spec)
+            } else {
+                spawn_unix_pty_process(spec)
+            }
+        }
     }
 }
 
@@ -770,35 +775,128 @@ fn normalize_input_text(text: &mut String, carriage_return_newlines: bool) {
 
 #[cfg(windows)]
 fn should_use_windows_pipes(spec: &SessionSpec) -> bool {
-    let command = basename(&spec.command).to_ascii_lowercase();
-    let args = spec
-        .args
-        .iter()
-        .map(|arg| arg.to_ascii_lowercase())
-        .collect::<Vec<_>>();
+    let command = normalized_command_name(&spec.command);
+    let args = lowercased_args(&spec.args);
 
     match command.as_str() {
-        "cmd" | "cmd.exe" => args.iter().any(|arg| arg == "/c"),
-        "powershell" | "powershell.exe" | "pwsh" | "pwsh.exe" => args.iter().any(|arg| {
+        "cmd" => args.iter().any(|arg| arg == "/c"),
+        "powershell" | "pwsh" => args.iter().any(|arg| {
             matches!(
                 arg.as_str(),
                 "-c" | "-command" | "-file" | "-encodedcommand" | "-ec"
             )
         }),
-        "bash" | "bash.exe" | "sh" | "zsh" | "fish" => args.iter().any(|arg| arg == "-c"),
-        "python" | "python.exe" | "python3" | "python3.exe" | "ipython" | "ipython.exe" => {
+        "bash" | "sh" | "zsh" | "fish" => {
+            !args.is_empty()
+                && !args
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "-i" | "--interactive"))
+        }
+        command if is_python_command(command) => {
             !args.is_empty() && !args.iter().any(|arg| arg == "-i")
         }
-        "node" | "node.exe" => !args.is_empty(),
-        "psql" | "psql.exe" => false,
+        "node" | "nodejs" => {
+            !args.is_empty()
+                && !args
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "-i" | "--interactive"))
+        }
+        "psql" | "mysql" | "sqlite3" | "redis-cli" => false,
         _ => true,
     }
 }
 
-#[cfg(windows)]
 fn basename(command: &str) -> &str {
-    std::path::Path::new(OsStr::new(command))
+    Path::new(command)
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or(command)
+}
+
+fn normalized_command_name(command: &str) -> String {
+    basename(command)
+        .to_ascii_lowercase()
+        .trim_end_matches(".exe")
+        .to_string()
+}
+
+fn lowercased_args(args: &[String]) -> Vec<String> {
+    args.iter().map(|arg| arg.to_ascii_lowercase()).collect()
+}
+
+fn is_python_command(command: &str) -> bool {
+    command == "python"
+        || command.starts_with("python2")
+        || command.starts_with("python3")
+        || command == "ipython"
+}
+
+#[cfg(unix)]
+fn should_use_unix_pipes(spec: &SessionSpec) -> bool {
+    let command = normalized_command_name(&spec.command);
+    let args = lowercased_args(&spec.args);
+
+    match command.as_str() {
+        "bash" | "sh" | "zsh" | "fish" => {
+            !args.is_empty()
+                && !args
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "-i" | "--interactive"))
+        }
+        "powershell" | "pwsh" => args.iter().any(|arg| {
+            matches!(
+                arg.as_str(),
+                "-c" | "-command" | "-file" | "-encodedcommand" | "-ec"
+            )
+        }),
+        command if is_python_command(command) => {
+            !args.is_empty() && !args.iter().any(|arg| arg == "-i")
+        }
+        "node" | "nodejs" => {
+            !args.is_empty()
+                && !args
+                    .iter()
+                    .any(|arg| matches!(arg.as_str(), "-i" | "--interactive"))
+        }
+        "psql" | "mysql" | "sqlite3" | "redis-cli" | "vim" | "vi" | "nvim" | "less" | "more"
+        | "top" | "htop" | "man" | "ssh" | "sftp" | "ftp" | "telnet" => false,
+        _ => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SessionSpec;
+    #[cfg(unix)]
+    use super::should_use_unix_pipes;
+    use crate::protocol::SessionBackend;
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_auto_prefers_pipes_for_noninteractive_commands() {
+        assert!(should_use_unix_pipes(&spec("sh", &["-c", "echo hi"])));
+        assert!(should_use_unix_pipes(&spec("python3.12", &["script.py"])));
+        assert!(should_use_unix_pipes(&spec("cargo", &["test"])));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_auto_keeps_repls_and_terminal_tools_on_pty() {
+        assert!(!should_use_unix_pipes(&spec("bash", &[])));
+        assert!(!should_use_unix_pipes(&spec("python3.12", &[])));
+        assert!(!should_use_unix_pipes(&spec("node", &["-i"])));
+        assert!(!should_use_unix_pipes(&spec("psql", &[])));
+        assert!(!should_use_unix_pipes(&spec("ssh", &[])));
+    }
+
+    fn spec(command: &str, args: &[&str]) -> SessionSpec {
+        SessionSpec {
+            name: None,
+            command: command.to_string(),
+            args: args.iter().map(|arg| (*arg).to_string()).collect(),
+            backend: SessionBackend::Auto,
+            cwd: None,
+            env: Vec::new(),
+        }
+    }
 }
