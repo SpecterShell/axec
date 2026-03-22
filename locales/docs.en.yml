@@ -16,7 +16,6 @@ docs:
     docs_title: Documentation
     docs_links: |
       - [Guide]({{guide_path}})
-      - [Implementation Plan]({{plan_path}})
     build_title: Build
     build_body: "Common local commands:"
     build_commands: |

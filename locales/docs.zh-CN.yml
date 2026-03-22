@@ -16,7 +16,6 @@ docs:
     docs_title: 文档
     docs_links: |
       - [使用指南]({{guide_path}})
-      - [实现计划]({{plan_path}})
     build_title: 构建
     build_body: "本地构建命令："
     build_commands: |

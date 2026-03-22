@@ -23,7 +23,6 @@ axec list
 ## 文档
 
 - [使用指南](guide.zh-CN.md)
-- [实现计划](PLAN.md)
 
 ## 构建
 

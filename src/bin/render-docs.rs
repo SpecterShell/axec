@@ -112,10 +112,6 @@ fn build_extras(spec: DocSpec) -> BTreeMap<String, String> {
                 relative_path(output, Path::new(guide_output(spec.locale))),
             );
             extras.insert(
-                "plan_path".to_string(),
-                relative_path(output, Path::new("docs/PLAN.md")),
-            );
-            extras.insert(
                 "license_path".to_string(),
                 relative_path(output, Path::new("LICENSE")),
             );

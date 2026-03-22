@@ -23,7 +23,6 @@ axec list
 ## Documentation
 
 - [Guide](docs/guide.md)
-- [Implementation Plan](docs/PLAN.md)
 
 ## Build
 

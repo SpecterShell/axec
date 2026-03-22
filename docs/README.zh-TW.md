@@ -23,7 +23,6 @@ axec list
 ## 說明文件
 
 - [使用指南](guide.zh-TW.md)
-- [開發路線圖](PLAN.md)
 
 ## 建置方式
 

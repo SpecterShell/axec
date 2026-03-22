@@ -17,7 +17,6 @@ docs:
     docs_title: 說明文件
     docs_links: |
       - [使用指南]({{guide_path}})
-      - [開發路線圖]({{plan_path}})
     build_title: 建置方式
     build_body: "常用本機建置指令："
     build_commands: |
