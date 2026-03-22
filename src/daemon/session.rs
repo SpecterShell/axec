@@ -82,6 +82,7 @@ struct SpawnedSession {
     writer: Box<dyn Write + Send>,
     waiter: Box<dyn SessionWaiter>,
     killer: Option<Box<dyn SessionKiller>>,
+    #[cfg(windows)]
     interrupt_via_stdin: bool,
     carriage_return_newlines: bool,
 }
@@ -447,7 +448,6 @@ fn spawn_unix_pty_process(spec: &SessionSpec) -> Result<SpawnedSession> {
         writer,
         waiter: Box::new(UnixSessionWaiter { child }),
         killer: Some(Box::new(UnixSessionKiller { killer })),
-        interrupt_via_stdin: false,
         carriage_return_newlines: false,
     })
 }
@@ -497,7 +497,6 @@ fn spawn_unix_piped_process(spec: &SessionSpec) -> Result<SpawnedSession> {
         writer,
         waiter: Box::new(UnixPipeSessionWaiter { child }),
         killer: None,
-        interrupt_via_stdin: false,
         carriage_return_newlines: false,
     })
 }
