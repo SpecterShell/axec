@@ -189,7 +189,10 @@ mod tests {
     fn strips_echo_and_marker() {
         let sent = "print(1)\n";
         let output = "print(1)\r\n1\r\n__AXREPL_DONE__\r\n>>> ";
-        assert_eq!(strip_completion_output(sent, "__AXREPL_DONE__", output), "1\r\n");
+        assert_eq!(
+            strip_completion_output(sent, "__AXREPL_DONE__", output),
+            "1\r\n"
+        );
     }
 
     #[test]

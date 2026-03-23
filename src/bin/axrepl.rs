@@ -5,7 +5,10 @@ use axec::client::connection::DaemonConnection;
 use axec::error::{AxecError, Result};
 use axec::i18n;
 use axec::protocol::{EnvVar, Request, Response, SessionInfo, SessionStatus};
-use axec::repl::{ReplDriver, infer_driver, infer_session_driver, strip_completion_output, wrap_script, write_session_driver};
+use axec::repl::{
+    ReplDriver, infer_driver, infer_session_driver, strip_completion_output, wrap_script,
+    write_session_driver,
+};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command as ClapCommand, value_parser};
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
@@ -121,7 +124,9 @@ fn build_command() -> ClapCommand {
         .subcommand(build_input_command())
         .subcommand(ClapCommand::new("list").about("List known REPL sessions"))
         .subcommand(build_kill_command())
-        .subcommand(ClapCommand::new("clean").about("Remove exited sessions and their on-disk state"))
+        .subcommand(
+            ClapCommand::new("clean").about("Remove exited sessions and their on-disk state"),
+        )
 }
 
 fn build_run_command() -> ClapCommand {
@@ -301,11 +306,9 @@ async fn input_repl(args: InputArgs, json: bool) -> Result<i32> {
             Response::Finished { running, .. } => {
                 if !output.contains(&marker) {
                     return Err(AxecError::Protocol(if running {
-                        "input finished before the REPL completion marker was observed"
-                            .to_string()
+                        "input finished before the REPL completion marker was observed".to_string()
                     } else {
-                        "the REPL session exited before returning its completion marker"
-                            .to_string()
+                        "the REPL session exited before returning its completion marker".to_string()
                     }));
                 }
 
@@ -516,9 +519,10 @@ async fn read_stdin_text() -> Result<String> {
 }
 
 async fn expect_response(connection: &mut DaemonConnection) -> Result<Response> {
-    connection.recv_response().await?.ok_or_else(|| {
-        AxecError::Protocol("daemon closed the connection unexpectedly".to_string())
-    })
+    connection
+        .recv_response()
+        .await?
+        .ok_or_else(|| AxecError::Protocol("daemon closed the connection unexpectedly".to_string()))
 }
 
 fn emit_json(value: &serde_json::Value) -> Result<()> {
@@ -545,10 +549,7 @@ fn parse_env_vars<'a>(
         .collect()
 }
 
-fn required_value(
-    matches: &ArgMatches,
-    name: &str,
-) -> std::result::Result<String, clap::Error> {
+fn required_value(matches: &ArgMatches, name: &str) -> std::result::Result<String, clap::Error> {
     matches
         .get_one::<String>(name)
         .cloned()
