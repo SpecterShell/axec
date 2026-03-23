@@ -18,6 +18,10 @@
 
 {{docs.guide.recipes_body}}
 
+## {{docs.guide.repl_title}}
+
+{{docs.guide.repl_body}}
+
 ## {{docs.guide.reference_title}}
 
 | {{docs.guide.command_header}} | {{docs.guide.behavior_header}} |
@@ -32,6 +36,16 @@
 | `axec kill --session UUID\|NAME` / `axec kill --all` | {{docs.guide.row_kill}} |
 | `axec clean` / `axec clear` | {{docs.guide.row_clean}} |
 | `axec attach --session UUID\|NAME` | {{docs.guide.row_attach}} |
+
+## {{docs.guide.repl_reference_title}}
+
+| {{docs.guide.command_header}} | {{docs.guide.behavior_header}} |
+|---|---|
+| `axrepl run [--name NAME] [--driver python\|node\|bash\|zsh] [--cwd DIR] [--env K=V]... <cmd> [args]` | {{docs.guide.row_repl_run}} |
+| `axrepl input [--session UUID\|NAME] [--driver python\|node\|bash\|zsh] <text\|->` | {{docs.guide.row_repl_input}} |
+| `axrepl list` | {{docs.guide.row_repl_list}} |
+| `axrepl kill --session UUID\|NAME` / `axrepl kill --all` | {{docs.guide.row_repl_kill}} |
+| `axrepl clean` | {{docs.guide.row_repl_clean}} |
 
 ## {{docs.guide.output_modes_title}}
 

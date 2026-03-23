@@ -4,20 +4,22 @@
 
 [English](../README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
 
-用于持久化异步命令、Shell 与 REPL 会话的守护进程式 CLI 工具。
+用于持久化命令会话与具备完成感知能力的 REPL 自动化的守护进程式 CLI 工具集。
 
-- 基于轻量守护进程启动独立的 Shell、REPL 与命令会话
+- 使用 `axec` 管理独立命令、Shell 与长生命周期会话
+- 使用 `axrepl` 在 REPL 中提交脚本，并仅在脚本执行完成后返回
 - 无需中断进程状态，可随时向同一会话发送后续输入
-- 支持流式读取实时输出，或查看历史日志与增量更新
-- 后续可通过 CLI 命令列举会话、发送信号、终止、清理或接入会话
+- 支持流式读取实时输出，或在后续 CLI 调用中查看历史日志与增量更新
+- 可通过同一守护进程列举会话、发送信号、终止、清理或接入会话
 
 ## 快速开始
 
 ```bash
-axec run --name py python
-axec input --session py --timeout 3 "print(40 + 2)"
-axec output --session py
-axec list
+axec run --name shell bash
+axec input --session shell "echo ready"
+
+axrepl run --name py python3
+axrepl input --session py "print(40 + 2)"
 ```
 
 ## 文档
@@ -29,7 +31,7 @@ axec list
 本地构建命令：
 
 ```bash
-cargo build
+cargo build --bins
 cargo test
 cargo run --bin render-docs
 ```

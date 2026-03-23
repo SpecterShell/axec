@@ -1,22 +1,6 @@
-#[macro_use]
-extern crate rust_i18n;
-
-i18n!("locales", fallback = "en");
-
-mod cli;
-mod client;
-mod config;
-mod daemon;
-mod error;
-mod i18n;
-mod paths;
-mod platform;
-mod protocol;
-mod terminal;
-mod transport;
-
 use std::ffi::OsStr;
 
+use axec::{cli, client, daemon, i18n};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

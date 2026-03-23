@@ -55,7 +55,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build --verbose
+        run: cargo build --verbose --bins
 
       - name: Test
         run: cargo test --verbose
@@ -71,46 +71,39 @@ jobs:
             os: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             artifact_name: axec-linux-x86_64
-            binary_name: axec
             archive_ext: tar.gz
           - name: linux-aarch64
             os: ubuntu-24.04
             target: aarch64-unknown-linux-musl
             artifact_name: axec-linux-aarch64
-            binary_name: axec
             archive_ext: tar.gz
           - name: macos-aarch64
             os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: axec-macos-aarch64
-            binary_name: axec
             archive_ext: tar.gz
           - name: macos-x86_64
             os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: axec-macos-x86_64
-            binary_name: axec
             archive_ext: tar.gz
           - name: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             vcvars_arch: amd64
             artifact_name: axec-windows-x86_64
-            binary_name: axec.exe
             archive_ext: zip
           - name: windows-aarch64
             os: windows-latest
             target: aarch64-pc-windows-msvc
             vcvars_arch: amd64_arm64
             artifact_name: axec-windows-aarch64
-            binary_name: axec.exe
             archive_ext: zip
           - name: windows-i686
             os: windows-latest
             target: i686-pc-windows-msvc
             vcvars_arch: amd64_x86
             artifact_name: axec-windows-i686
-            binary_name: axec.exe
             archive_ext: zip
     steps:
       - name: Checkout
@@ -130,11 +123,11 @@ jobs:
 
       - name: Build (Linux)
         if: runner.os == 'Linux'
-        run: cross build --release --verbose --target ${{ matrix.target }}
+        run: cross build --release --verbose --bins --target ${{ matrix.target }}
 
       - name: Build (macOS)
         if: runner.os == 'macOS'
-        run: cargo build --release --verbose --target ${{ matrix.target }}
+        run: cargo build --release --verbose --bins --target ${{ matrix.target }}
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
@@ -143,25 +136,27 @@ jobs:
           for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
           if not defined VSINSTALL exit /b 1
           call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.vcvars_arch }}
-          cargo build --release --verbose --target ${{ matrix.target }}
+          cargo build --release --verbose --bins --target ${{ matrix.target }}
 
       - name: Package artifact (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ matrix.binary_name }} dist/${{ matrix.binary_name }}
-          chmod +x dist/${{ matrix.binary_name }}
-          tar -czf ${{ matrix.artifact_name }}.${{ matrix.archive_ext }} -C dist ${{ matrix.binary_name }}
+          cp target/${{ matrix.target }}/release/axec dist/axec
+          cp target/${{ matrix.target }}/release/axrepl dist/axrepl
+          chmod +x dist/axec dist/axrepl
+          tar -czf ${{ matrix.artifact_name }}.${{ matrix.archive_ext }} -C dist axec axrepl
 
       - name: Package artifact (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.binary_name }}"
+          Copy-Item "target/${{ matrix.target }}/release/axec.exe" "dist/axec.exe"
+          Copy-Item "target/${{ matrix.target }}/release/axrepl.exe" "dist/axrepl.exe"
           Push-Location dist
-          Compress-Archive -Path "${{ matrix.binary_name }}" -DestinationPath "../${{ matrix.artifact_name }}.${{ matrix.archive_ext }}" -Force
+          Compress-Archive -Path "axec.exe","axrepl.exe" -DestinationPath "../${{ matrix.artifact_name }}.${{ matrix.archive_ext }}" -Force
           Pop-Location
 
       - name: Upload workflow artifact

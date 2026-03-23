@@ -4,20 +4,22 @@
 
 [English](README.md) | [简体中文](docs/README.zh-CN.md) | [繁體中文](docs/README.zh-TW.md)
 
-Daemon-backed CLI for persistent async command, shell, and REPL sessions.
+Daemon-backed CLIs for persistent command sessions and completion-aware REPL automation.
 
-- start detached shells, REPLs, and commands behind a small daemon
+- use `axec` for detached commands, shells, and long-lived session management
+- use `axrepl` when REPL input should return only after the submitted script has finished
 - send more input later without losing process state
-- stream live output or read historical and incremental logs
-- list, signal, kill, clean, or attach to sessions from later CLI calls
+- stream live output or read historical and incremental logs from later CLI calls
+- list, signal, kill, clean, or attach to sessions behind the same daemon
 
 ## Quick Start
 
 ```bash
-axec run --name py python
-axec input --session py --timeout 3 "print(40 + 2)"
-axec output --session py
-axec list
+axec run --name shell bash
+axec input --session shell "echo ready"
+
+axrepl run --name py python3
+axrepl input --session py "print(40 + 2)"
 ```
 
 ## Documentation
@@ -29,7 +31,7 @@ axec list
 Common local commands:
 
 ```bash
-cargo build
+cargo build --bins
 cargo test
 cargo run --bin render-docs
 ```
