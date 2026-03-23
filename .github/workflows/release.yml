@@ -108,11 +108,23 @@ jobs:
           Compress-Archive -Path "axec.exe","axrepl.exe" -DestinationPath "../${{ matrix.artifact_name }}.${{ matrix.archive_ext }}" -Force
           Pop-Location
 
-      - name: Upload workflow artifact
+      - name: Upload workflow artifact (Unix)
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_name }}.${{ matrix.archive_ext }}
+          if-no-files-found: error
+
+      - name: Upload workflow artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/axec.exe
+            dist/axrepl.exe
+          if-no-files-found: error
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v2

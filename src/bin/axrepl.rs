@@ -1,7 +1,9 @@
+use std::ffi::OsStr;
 use std::io::Write;
 use std::path::PathBuf;
 
 use axec::client::connection::DaemonConnection;
+use axec::daemon;
 use axec::error::{AxecError, Result};
 use axec::i18n;
 use axec::protocol::{EnvVar, Request, Response, SessionInfo, SessionStatus};
@@ -11,6 +13,7 @@ use axec::repl::{
 };
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command as ClapCommand, value_parser};
 use tokio::io::AsyncReadExt;
+use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -59,11 +62,16 @@ struct ReplSession {
 
 #[tokio::main]
 async fn main() {
+    init_tracing();
     i18n::init_locale();
 
-    let result = match parse() {
-        Ok(cli) => run(cli).await,
-        Err(err) => err.exit(),
+    let result = if std::env::args_os().nth(1).as_deref() == Some(OsStr::new("--daemon")) {
+        daemon::run().await.map(|()| 0)
+    } else {
+        match parse() {
+            Ok(cli) => run(cli).await,
+            Err(err) => err.exit(),
+        }
     };
 
     match result {
@@ -73,6 +81,15 @@ async fn main() {
             std::process::exit(1);
         }
     }
+}
+
+fn init_tracing() {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .without_time()
+        .try_init();
 }
 
 fn parse() -> std::result::Result<Cli, clap::Error> {

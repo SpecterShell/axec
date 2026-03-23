@@ -30,6 +30,12 @@ impl ActivityTracker {
     }
 }
 
+impl Default for ActivityTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn spawn_idle_monitor(
     manager: Arc<SessionManager>,
     tracker: ActivityTracker,
