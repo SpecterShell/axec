@@ -9,6 +9,28 @@ permissions:
   contents: write
 
 jobs:
+  skills:
+    name: Release Skills Archive
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package skills archive
+        run: zip -r SKILLs.zip skills
+
+      - name: Upload skills artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SKILLs
+          path: SKILLs.zip
+          if-no-files-found: error
+
+      - name: Upload skills release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SKILLs.zip
+
   build-release:
     name: Release (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
